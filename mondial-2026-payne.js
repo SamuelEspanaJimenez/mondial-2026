@@ -986,7 +986,10 @@ async function gistPull(rawUrl){
     }else{
       const url=rawUrl || gistDataRawUrl(c);
       if(!url) return {ok:false,msg:"pas de Gist configuré"};
-      const res=await fetch(url, {cache:"no-store"});
+      // Paramètre unique : casse le cache CDN (Fastly) de GitHub, qui sinon sert une copie périmée
+      // (effet « une modif en retard ») — `no-store` ne touche que le cache du navigateur, pas le CDN.
+      const bust=url+(url.includes("?")?"&":"?")+"_cb="+Date.now();
+      const res=await fetch(bust, {cache:"no-store"});
       if(!res.ok) return {ok:false,msg:"HTTP "+res.status};
       o=JSON.parse(await res.text());
     }
