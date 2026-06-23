@@ -263,6 +263,28 @@
   /* Les notes (mood) restent éditables même en consultation : elles sont personnelles et locales. */
   body.readonly .rb,body.readonly .rclr{pointer-events:auto;cursor:pointer}
   body.editmode::after{content:"✏️ Mode édition";position:fixed;right:14px;bottom:14px;z-index:60;background:var(--amber,#f3c14b);color:#0a130f;padding:7px 13px;border-radius:999px;font-size:12px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.45);pointer-events:none}
+  /* Bouton « Exporter Calendrier » : visible uniquement en consultation, à la place d'Exporter/Importer */
+  #btnViewerCal{display:none}
+  body.readonly #btnViewerCal{display:inline-block}
+  body.readonly #calUrl{pointer-events:auto}
+  /* ---- fenêtre d'abonnement au calendrier ---- */
+  .modal-ov{position:fixed;inset:0;z-index:80;background:rgba(5,10,8,.74);backdrop-filter:blur(3px);
+    display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
+  .modal-ov.show{display:flex}
+  .modal-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    max-width:560px;width:100%;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .modal-card h2{margin:0 0 4px;font-size:18px;font-weight:700;letter-spacing:-.01em}
+  .modal-card .msub{font-size:12.5px;color:var(--muted);margin:0 0 16px}
+  .cal-warn{font-size:12px;color:var(--amber);margin-bottom:12px}
+  .cal-urlrow{display:flex;gap:8px;margin-bottom:12px}
+  .cal-urlrow input{flex:1;font-family:"Space Mono",monospace;font-size:11px}
+  .cal-note{font-size:12px;color:var(--ink);background:rgba(57,210,127,.08);border:1px solid rgba(57,210,127,.3);
+    border-radius:8px;padding:9px 12px;margin-bottom:16px;line-height:1.45}
+  .cal-steps{font-size:12.5px;color:var(--muted);line-height:1.5}
+  .cal-steps h3{font-size:12px;font-weight:700;color:var(--ink);margin:14px 0 4px}
+  .cal-steps h3:first-child{margin-top:0}
+  .cal-steps b{color:var(--ink);font-weight:600}
+  .modal-foot{display:flex;justify-content:flex-end;margin-top:18px}
   .bracket-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:14px}
   .bracket{display:flex;gap:3px;height:560px;min-width:1100px}
   .b-col{display:flex;flex-direction:column;justify-content:space-around;flex:1;min-width:118px;padding:0 2px;position:relative}
@@ -331,6 +353,7 @@
           <button class="btn" id="btnExport">Exporter</button>
           <button class="btn" id="btnImport">Importer</button>
           <button class="btn danger" id="btnReset">Tout effacer</button>
+          <button class="btn" id="btnViewerCal" title="Obtenir l'URL d'abonnement au calendrier (iCalendar / Google Agenda)">📅 Exporter Calendrier (iCalendar, Google Agenda)</button>
           <input type="file" id="fileImport" accept="application/json" hidden>
         </div>
       </div>
@@ -455,6 +478,35 @@
 <div class="toast" id="toast"></div>
 <div class="mood-pop" id="moodPop"></div>
 
-<script src="mondial-2026-payne.js"></script>
+<!-- Fenêtre d'abonnement au calendrier (mode consultation) -->
+<div class="modal-ov" id="calModal">
+  <div class="modal-card">
+    <h2>📅 S'abonner au calendrier</h2>
+    <p class="msub">Tous les matchs de la Coupe du Monde 2026 — phase de poules + phase éliminatoire — directement dans ton agenda.</p>
+    <div class="cal-warn" id="calNoUrl" style="display:none">Le calendrier n'a pas encore été publié par l'organisateur. Réessaie un peu plus tard.</div>
+    <div class="cal-urlrow">
+      <input type="text" id="calUrl" readonly placeholder="URL du calendrier…">
+      <button class="btn" id="calCopy">Copier l'URL</button>
+    </div>
+    <div class="cal-note">🔄 Le calendrier se met à jour <b>automatiquement deux fois par jour</b> et prend en compte les nouveaux résultats. Abonne-toi une seule fois : ton agenda reste à jour tout seul.</div>
+    <div class="cal-steps">
+      <h3>Google Agenda (ordinateur)</h3>
+      Dans la colonne de gauche, à côté de « Autres agendas », clique sur <b>+</b> → <b>À partir de l'URL</b> → colle l'URL → <b>Ajouter l'agenda</b>.
+      <h3>iPhone / iPad (iOS)</h3>
+      <b>Réglages</b> → <b>Calendrier</b> → <b>Comptes</b> → <b>Ajouter un compte</b> → <b>Autre</b> → <b>Ajouter un abonnement calendrier</b> → colle l'URL → <b>Suivant</b> → <b>Enregistrer</b>.
+      <h3>Mac (app Calendrier / iCalendar)</h3>
+      <b>Fichier</b> → <b>Nouvel abonnement à un calendrier…</b> → colle l'URL → <b>S'abonner</b>.
+      <h3>Android</h3>
+      L'abonnement par URL se fait via <b>Google Agenda sur ordinateur</b> (méthode ci-dessus). Une fois ajouté, le calendrier apparaît automatiquement dans l'app Google Agenda du téléphone — pense à cocher sa case dans le menu pour l'afficher.
+      <h3>PC — Outlook</h3>
+      <b>Calendrier</b> → <b>Ajouter un calendrier</b> → <b>S'abonner à partir du Web</b> → colle l'URL → <b>Importer</b>.
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-calclose>Fermer</button>
+    </div>
+  </div>
+</div>
+
+<script src="mondial-2026-payne.js?v=8"></script>
 </body>
 </html>
