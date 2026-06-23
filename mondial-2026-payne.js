@@ -1246,9 +1246,10 @@ function refreshCardState(id){
   const params=new URLSearchParams(location.search);
   const dataSrc = params.get("data") || PUBLIC_DATA_URL || "";
   VIEW_DATA_URL = dataSrc || null;
-  // Lecture seule pour un visiteur (pas de token) dès qu'une source de données existe, ou si ?view est présent.
-  // ?edit force le mode édition (utile pour TA configuration initiale sur le site en ligne).
-  READ_ONLY = !params.has("edit") && ( params.has("view") || (!gistCfg().token && !!dataSrc) );
+  // Règle simple : l'URL normale = CONSULTATION (lecture seule) pour tout le monde, toi inclus,
+  // dès qu'une source de données existe (PUBLIC_DATA_URL ou ?data=) ou si ?view est présent.
+  // Pour SAISIR, ajoute ?edit à l'URL (le token reste nécessaire pour publier).
+  READ_ONLY = !params.has("edit") && ( params.has("view") || !!dataSrc );
   if(READ_ONLY) document.body.classList.add("readonly");
 
   const fg=$("#filtGroup"); Object.keys(GROUPS).forEach(g=>{const o=document.createElement("option"); o.value=g; o.textContent="Groupe "+g; fg.appendChild(o);});
@@ -1261,7 +1262,9 @@ function refreshCardState(id){
 
   // Synchro Gist : récupère la version partagée et garde la plus récente (« dernière saisie gagne »).
   // Propriétaire (token) → lecture via l'API GitHub (sans cache) ; visiteur → via l'URL « raw ».
-  const pull = await gistPull(READ_ONLY ? VIEW_DATA_URL : undefined);
+  // Repli sur l'URL publique si l'API échoue, pour ne jamais repartir d'un état vide (anti-écrasement).
+  let pull = await gistPull(READ_ONLY ? VIEW_DATA_URL : undefined);
+  if(!pull.ok && VIEW_DATA_URL) pull = await gistPull(VIEW_DATA_URL);
   if(pull.ok && pull.data){
     const remoteAt = +pull.data._savedAt || 0;
     const localAt  = +(localStorage.getItem(SYNC_KEY)||0);
