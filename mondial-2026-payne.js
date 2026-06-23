@@ -176,8 +176,38 @@ const $ = s=>document.querySelector(s);
 const flag = name=>{const c=(TEAMS[name]||["",""])[0];
   return c?`<img class="flag" src="https://flagcdn.com/h40/${c}.png" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`:"";};
 const short = name=>(TEAMS[name]||["",name])[1];
-function teamCell(name,cls){
-  return `<span class="side ${cls}">${flag(name)}<span class="tname"><span class="full">${name}</span><span class="short">${short(name)}</span></span></span>`;
+function escHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function teamCell(name,cls,scoHtml){
+  return `<span class="side ${cls}">${flag(name)}<span class="tinfo"><span class="tname"><span class="full">${name}</span><span class="short">${short(name)}</span></span>${scoHtml||""}</span></span>`;
+}
+// Découpe une saisie de minutes (« 75 87 », « 45+2, 90 ») en tokens ordonnés.
+function parseMins(str){
+  return String(str||"").split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean)
+    .sort((a,b)=>(parseInt(a,10)||0)-(parseInt(b,10)||0));
+}
+// Minute de référence d'un buteur (sa plus précoce) — sert au tri « le plus précoce d'abord ».
+function firstMin(s){const m=parseMins(s.m); return m.length?(parseInt(m[0],10)||0):9999;}
+// Nombre de buts d'une entrée : autant que de minutes saisies (repli : ancien champ g, sinon 1).
+function goalCount(s){const m=parseMins(s.m); return m.length?m.length:(+s.g||1);}
+// Équipes (dom./ext.) d'un match, qu'il soit de poule ou à élimination directe.
+function matchTeams(id){
+  const m=MATCHES.find(x=>x.id===id); if(m) return {h:m.h,a:m.a};
+  const k=KO.find(x=>x.id===id);
+  if(k){const r=koResolved()[k.id]||{}, st=state.ko[k.id]||{};
+    return {h:(st.h&&st.h.trim())||r.h||"", a:(st.a&&st.a.trim())||r.a||""};}
+  return {h:"",a:""};
+}
+// Ligne « filigrane » des buteurs d'une équipe (côté h ou a) sous le nom.
+// Format : « C. Ronaldo 75' 87', N. Mendes 77' » — buteur le plus précoce en tête.
+function scorerLine(scs,side){
+  const list=(scs||[]).filter(s=>s.t===side&&(s.n||"").trim());
+  if(!list.length) return "";
+  const txt=[...list].sort((a,b)=>firstMin(a)-firstMin(b)).map(s=>{
+    const n=escHtml((s.n||"").trim())+(s.csc?" (csc)":"");
+    const mins=parseMins(s.m).map(x=>escHtml(x)+"'").join(" ");
+    return mins?`${n} ${mins}`:n;
+  }).join(", ");
+  return `<span class="tsco">${txt}</span>`;
 }
 function effMin(t){const[h,m]=t.split(":").map(Number); return h<10 ? (h+24)*60+m : h*60+m;}
 function viewDate(d,t){const h=+t.split(":")[0]; if(h>=10) return d;
@@ -259,6 +289,17 @@ function matchCard(m){
   const done=hv!==""&&av!=="";
   let wcls=""; if(done){ if(+hv>+av) wcls="winL"; else if(+av>+hv) wcls="winA"; }
   const scs=state.sco[m.id]||[];
+  const scoreBox = READ_ONLY
+    ? `<span class="scorebox ro">
+        <span class="sval mono">${done?hv:"–"}</span>
+        <span class="vs">–</span>
+        <span class="sval mono">${done?av:"–"}</span>
+      </span>`
+    : `<span class="scorebox">
+        <input class="mono" type="number" min="0" inputmode="numeric" data-id="${m.id}" data-s="h" value="${hv}">
+        <span class="vs">–</span>
+        <input class="mono" type="number" min="0" inputmode="numeric" data-id="${m.id}" data-s="a" value="${av}">
+      </span>`;
   const el=document.createElement("div");
   el.className="match "+(done?"done ":"")+wcls;
   el.innerHTML=`
@@ -267,13 +308,9 @@ function matchCard(m){
         <span class="hr mono">${m.t}</span>
         <span class="gp" style="background:${GCOLOR[m.g]}">GR. ${m.g}</span>
       </span>
-      ${teamCell(m.h,"home")}
-      <span class="scorebox">
-        <input class="mono" type="number" min="0" inputmode="numeric" data-id="${m.id}" data-s="h" value="${hv}">
-        <span class="vs">–</span>
-        <input class="mono" type="number" min="0" inputmode="numeric" data-id="${m.id}" data-s="a" value="${av}">
-      </span>
-      ${teamCell(m.a,"away")}
+      ${teamCell(m.h,"home",scorerLine(scs,"h"))}
+      ${scoreBox}
+      ${teamCell(m.a,"away",scorerLine(scs,"a"))}
       <button class="mexpand ${scs.length?'has':''}" data-exp="${m.id}" title="Buteurs">⚽</button>
     </div>
     <div class="mmeta">📍 ${m.v}</div>
@@ -283,9 +320,9 @@ function matchCard(m){
 }
 // Étiquette compacte du tour, affichée dans le calendrier à la place du chip de groupe.
 const KO_TAG={"16e":"16E","8e":"8E","4e":"QUART","Demi":"DEMI","3e place":"3E P.","Finale":"FINALE"};
-function koTeamCell(name,disp,isPh,cls){
-  if(isPh) return `<span class="side ${cls} ph"><span class="tname"><span class="full">${disp}</span><span class="short">${disp}</span></span></span>`;
-  return `<span class="side ${cls}">${flag(name)}<span class="tname"><span class="full">${name}</span><span class="short">${short(name)}</span></span></span>`;
+function koTeamCell(name,disp,isPh,cls,scoHtml){
+  if(isPh) return `<span class="side ${cls} ph"><span class="tinfo"><span class="tname"><span class="full">${disp}</span><span class="short">${disp}</span></span></span></span>`;
+  return `<span class="side ${cls}">${flag(name)}<span class="tinfo"><span class="tname"><span class="full">${name}</span><span class="short">${short(name)}</span></span>${scoHtml||""}</span></span>`;
 }
 // Carte d'un match à élimination directe dans le calendrier.
 // Équipes résolues via koResolved() (placeholders sinon), scores éditables → state.ko.
@@ -306,6 +343,7 @@ function koMatchCard(k,res){
         <option value="a" ${st.pen==='a'?'selected':''}>${r.a?short(r.a):'ext.'}</option>
       </select></span>`;
   }
+  const scs=state.sco[k.id]||[];
   const el=document.createElement("div");
   el.className="match ko "+(done?"done ":"")+wcls;
   el.innerHTML=`
@@ -314,33 +352,50 @@ function koMatchCard(k,res){
         <span class="hr mono">${k.t}</span>
         <span class="gp ko" title="${ROUND_LABEL[k.r]}">${KO_TAG[k.r]||k.r}</span>
       </span>
-      ${koTeamCell(r.h,hName,hPh,"home")}
-      <span class="scorebox">
+      ${koTeamCell(r.h,hName,hPh,"home",hPh?"":scorerLine(scs,"h"))}
+      ${READ_ONLY
+        ? `<span class="scorebox ro"><span class="sval mono">${done?hv:"–"}</span><span class="vs">–</span><span class="sval mono">${done?av:"–"}</span></span>`
+        : `<span class="scorebox">
         <input class="mono" type="number" min="0" inputmode="numeric" data-koid="${k.id}" data-s="hs" value="${hv}">
         <span class="vs">–</span>
         <input class="mono" type="number" min="0" inputmode="numeric" data-koid="${k.id}" data-s="as" value="${av}">
-      </span>
-      ${koTeamCell(r.a,aName,aPh,"away")}
+      </span>`}
+      ${koTeamCell(r.a,aName,aPh,"away",aPh?"":scorerLine(scs,"a"))}
+      <button class="mexpand ${scs.length?'has':''}" data-exp="${k.id}" title="Buteurs">⚽</button>
     </div>
-    <div class="mmeta">📍 ${k.v}${pen}</div>`;
+    <div class="mmeta">📍 ${k.v}${pen}</div>
+    <div class="scorers" id="sco-${k.id}"></div>`;
   return el;
 }
 function renderScorersEditor(id){
   const box=$("#sco-"+id); if(!box) return;
-  const m=MATCHES.find(x=>x.id===id);
+  const t=matchTeams(id);
+  const hLbl=t.h?short(t.h):"Dom.", aLbl=t.a?short(t.a):"Ext.";
   const scs=state.sco[id]||[];
   let rows=scs.map((s,i)=>`
     <div class="grow">
-      <input type="text" placeholder="Buteur" value="${(s.n||'').replace(/"/g,'&quot;')}" data-sc="${id}" data-i="${i}" data-k="n">
+      <input type="text" placeholder="Buteur" value="${escHtml(s.n||'')}" data-sc="${id}" data-i="${i}" data-k="n">
       <select data-sc="${id}" data-i="${i}" data-k="t">
-        <option value="h" ${s.t==='h'?'selected':''}>${short(m.h)}</option>
-        <option value="a" ${s.t==='a'?'selected':''}>${short(m.a)}</option>
+        <option value="h" ${s.t==='h'?'selected':''}>${hLbl}</option>
+        <option value="a" ${s.t==='a'?'selected':''}>${aLbl}</option>
       </select>
-      <span class="gnum"><input type="number" min="1" value="${s.g||1}" data-sc="${id}" data-i="${i}" data-k="g"></span>
+      <span class="gmin"><input type="text" inputmode="numeric" placeholder="min. (ex. 75 87)" value="${escHtml(s.m||'')}" data-sc="${id}" data-i="${i}" data-k="m"></span>
+      <label class="gcsc" title="Contre son camp — non comptabilisé au classement"><input type="checkbox" data-sc="${id}" data-i="${i}" data-k="csc" ${s.csc?'checked':''}>csc</label>
       <button class="grm" data-rm="${id}" data-i="${i}" title="Retirer">✕</button>
     </div>`).join("");
   box.innerHTML=`<h4>Buteurs</h4><div class="glist">${rows}</div>
     <button class="addg" data-add="${id}">+ Ajouter un buteur</button>`;
+}
+// Met à jour en direct les lignes buteurs sous les deux équipes d'une carte sans la reconstruire (préserve le focus de saisie).
+function refreshScorerLine(id){
+  const box=$("#sco-"+id); if(!box) return;
+  const card=box.closest(".match"); if(!card) return;
+  [["home","h"],["away","a"]].forEach(([cls,side])=>{
+    const tinfo=card.querySelector(".side."+cls+" .tinfo"); if(!tinfo) return;
+    const old=tinfo.querySelector(".tsco"); if(old) old.remove();
+    const html=scorerLine(state.sco[id]||[],side);
+    if(html) tinfo.insertAdjacentHTML("beforeend",html);
+  });
 }
 
 /* ============ TIEBREAKERS ============ */
@@ -473,13 +528,14 @@ function renderStandings(){
 function renderScorersLB(){
   const agg={};
   Object.keys(state.sco).forEach(id=>{
-    const m=MATCHES.find(x=>x.id===+id); if(!m) return;
+    const t=matchTeams(+id); if(!t.h&&!t.a) return;
     (state.sco[id]||[]).forEach(s=>{
+      if(s.csc) return; // contre son camp : non comptabilisé au classement
       const name=(s.n||"").trim(); if(!name) return;
-      const team= s.t==='a'?m.a:m.h;
+      const team= s.t==='a'?t.a:t.h; if(!team) return;
       const key=name+"|"+team;
       agg[key]=agg[key]||{n:name,t:team,g:0};
-      agg[key].g += (+s.g||1);
+      agg[key].g += goalCount(s);
     });
   });
   const arr=Object.values(agg).sort((a,b)=>b.g-a.g||a.n.localeCompare(b.n));
@@ -693,6 +749,7 @@ function renderKO(){
   });
   const hint=$("#thirdHint"); if(hint) hint.textContent=thirdHintText();
   renderTableau(); // garde la vue Tableau synchronisée en permanence avec la Liste
+  if(READ_ONLY){ $("#koBody").style.display="none"; $("#koTableau").style.display="block"; } // consultation : seule la vue Tableau est montrée
 }
 function slotHint(slot){
   if(/^[12][A-L]$/.test(slot)) return (slot[0]==="1"?"1er gr. ":"2e gr. ")+slot[1];
@@ -760,7 +817,7 @@ function buildKoIcs(){
   const esc=s=>String(s).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\n/g,"\\n");
   const out=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//CdM 2026//Phase finale//FR",
     "CALSCALE:GREGORIAN","METHOD:PUBLISH",
-    "X-WR-CALNAME:Coupe du Monde 2026 - Phase finale","X-WR-TIMEZONE:Europe/Paris"];
+    "X-WR-CALNAME:Coupe du Monde 2026 - Phase éliminatoire","X-WR-TIMEZONE:Europe/Paris"];
   KO.forEach(k=>{
     const [Y,Mo,D]=k.d.split("-").map(Number), [h,mi]=k.t.split(":").map(Number);
     const start=new Date(Date.UTC(Y,Mo-1,D,h-2,mi,0)); // Paris CEST = UTC+2
@@ -776,7 +833,7 @@ function buildKoIcs(){
       `DTEND:${fmt(end)}`,
       `SUMMARY:${esc(`${hF}${hName} - ${aName}${aF}`)}`,
       `LOCATION:${esc(k.v)}`,
-      `DESCRIPTION:${esc(`Coupe du Monde 2026\nPhase finale - ${ROUND_LABEL[k.r]} (Match ${k.id})\n${k.v}`)}`,
+      `DESCRIPTION:${esc(`Coupe du Monde 2026\nPhase éliminatoire - ${ROUND_LABEL[k.r]} (Match ${k.id})\n${k.v}`)}`,
       `CATEGORIES:${esc(ROUND_LABEL[k.r])}`,
       "END:VEVENT");
   });
@@ -1140,17 +1197,17 @@ function bind(){
     const g=e.target.closest("[data-sc]");
     if(g){const id=+g.dataset.sc,i=+g.dataset.i,k=g.dataset.k;
       state.sco[id]=state.sco[id]||[];
-      if(!state.sco[id][i]) state.sco[id][i]={n:"",t:"h",g:1};
-      state.sco[id][i][k]= k==="g" ? (+g.value||1) : g.value;
-      saveState(); renderScorersLB();
+      if(!state.sco[id][i]) state.sco[id][i]={n:"",t:"h",m:""};
+      state.sco[id][i][k]= k==="csc" ? g.checked : g.value;
+      saveState(); renderScorersLB(); refreshScorerLine(id);
       return;}
   });
   $("#calBody").addEventListener("change",e=>{
     if(READ_ONLY) return;
     const g=e.target.closest("select[data-sc]");
     if(g){const id=+g.dataset.sc,i=+g.dataset.i;
-      state.sco[id]=state.sco[id]||[]; if(!state.sco[id][i]) state.sco[id][i]={n:"",t:"h",g:1};
-      state.sco[id][i].t=g.value; saveState(); renderScorersLB(); return;}
+      state.sco[id]=state.sco[id]||[]; if(!state.sco[id][i]) state.sco[id][i]={n:"",t:"h",m:""};
+      state.sco[id][i].t=g.value; saveState(); renderScorersLB(); refreshScorerLine(id); return;}
     const kp=e.target.closest("select[data-kopen]");
     if(kp){const id=+kp.dataset.kopen;
       state.ko[id]=state.ko[id]||{}; state.ko[id].pen=kp.value;
@@ -1167,13 +1224,13 @@ function bind(){
     if(READ_ONLY) return;
     const add=e.target.closest("[data-add]");
     if(add){const id=+add.dataset.add; state.sco[id]=state.sco[id]||[];
-      state.sco[id].push({n:"",t:"h",g:1}); saveState(); renderScorersEditor(id);
+      state.sco[id].push({n:"",t:"h",m:""}); saveState(); renderScorersEditor(id);
       const ex=$('[data-exp="'+id+'"]'); if(ex) ex.classList.add("has");
       return;}
     const rm=e.target.closest("[data-rm]");
     if(rm){const id=+rm.dataset.rm,i=+rm.dataset.i; state.sco[id].splice(i,1);
       if(!state.sco[id].length){const ex=$('[data-exp="'+id+'"]'); if(ex) ex.classList.remove("has");}
-      saveState(); renderScorersEditor(id); renderScorersLB();
+      saveState(); renderScorersEditor(id); renderScorersLB(); refreshScorerLine(id);
       return;}
     const nb=e.target.closest("[data-note]");
     if(nb){const id=+nb.dataset.note,v=+nb.dataset.v;
