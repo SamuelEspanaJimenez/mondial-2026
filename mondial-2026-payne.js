@@ -200,7 +200,8 @@ function todayParisView(){
 function toast(msg){const t=$("#toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1900);}
 
 /* ============ CALENDAR ============ */
-let filt={state:"all",group:"",team:"",phase:"all"};
+let filt={state:"all",group:"",team:"",phase:"all",date:""};
+const CAL_MIN_DATE="2026-06-11", CAL_MAX_DATE="2026-07-19";
 function renderCal(){
   const today=todayParisView();
   const wrap=$("#calBody"); wrap.innerHTML="";
@@ -212,6 +213,7 @@ function renderCal(){
     if(filt.state==="up"&&done) return false;
     if(filt.state==="done"&&!done) return false;
     if(filt.group&&m.g!==filt.group) return false;
+    if(filt.date&&viewDate(m.d,m.t)!==filt.date) return false;
     if(filt.team){
       if(!m.h.toLowerCase().includes(q)&&!m.a.toLowerCase().includes(q)&&!short(m.h).toLowerCase().includes(q)&&!short(m.a).toLowerCase().includes(q)) return false;}
     return true;
@@ -224,6 +226,7 @@ function renderCal(){
     const done=st.hs!==undefined&&st.hs!==""&&st.as!==undefined&&st.as!=="";
     if(filt.state==="up"&&done) return false;
     if(filt.state==="done"&&!done) return false;
+    if(filt.date&&viewDate(k.d,k.t)!==filt.date) return false;
     if(filt.team){
       const r=koRes[k.id]||{}, h=r.h||"", a=r.a||"";
       if(!h.toLowerCase().includes(q)&&!a.toLowerCase().includes(q)&&!short(h).toLowerCase().includes(q)&&!short(a).toLowerCase().includes(q)) return false;}
@@ -1111,6 +1114,15 @@ function bind(){
     filt.phase=b.dataset.ph; renderCal();});
   $("#filtGroup").addEventListener("change",e=>{filt.group=e.target.value; renderCal();});
   $("#filtTeam").addEventListener("input",e=>{filt.team=e.target.value; renderCal();});
+  $("#filtDate").addEventListener("change",e=>{
+    let v=e.target.value;
+    if(v){ if(v<CAL_MIN_DATE) v=CAL_MIN_DATE; else if(v>CAL_MAX_DATE) v=CAL_MAX_DATE; e.target.value=v; }
+    filt.date=v; renderCal();});
+  $("#filtToday").addEventListener("click",()=>{
+    let d=todayParisView();
+    if(d<CAL_MIN_DATE) d=CAL_MIN_DATE; else if(d>CAL_MAX_DATE) d=CAL_MAX_DATE;
+    filt.date=d; $("#filtDate").value=d; renderCal();});
+  $("#filtDateClear").addEventListener("click",()=>{filt.date=""; $("#filtDate").value=""; renderCal();});
   $("#calBody").addEventListener("input",e=>{
     if(READ_ONLY) return;
     const sc=e.target.closest("input[data-id]");
