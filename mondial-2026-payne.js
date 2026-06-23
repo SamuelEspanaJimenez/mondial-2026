@@ -144,6 +144,10 @@ const ROUND_LABEL = {"16e":"Seizièmes de finale","8e":"Huitièmes de finale","4
 /* ============ STATE + STORAGE ============ */
 const SKEY = "cdm2026_payne_v1";
 const SYNC_KEY = "cdm2026_synced_at_v1"; // horodatage de la dernière synchro Gist connue localement
+// Optionnel — pour raccourcir le lien de consultation : colle ici l'URL « URL de données » affichée
+// dans le panneau ☁ Sync cloud après ta 1re publication. Une fois remplie, le lien à partager devient
+// simplement l'adresse du site (plus besoin de « ?view&data=… »). Laisse "" si tu n'en veux pas.
+const PUBLIC_DATA_URL = "https://gist.githubusercontent.com/SamuelEspanaJimenez/e3987737775211feebd0fd93ffdbde90/raw/cdm2026_data.json";
 let state = { res:{}, sco:{}, ko:{}, notes:{} };
 let memFallback = false;
 let READ_ONLY = false;     // page de consultation (?view) → aucune saisie possible
@@ -792,7 +796,13 @@ function gistSave(c){ try{localStorage.setItem(GIST_KEY,JSON.stringify(c));}catc
 // URL « raw » (toujours la dernière version) du fichier de données — lisible sans token, même pour un Gist secret.
 function gistDataRawUrl(c){ c=c||gistCfg(); return (c.id&&c.login)?`https://gist.githubusercontent.com/${c.login}/${c.id}/raw/${GIST_DATA_FILE}`:""; }
 // Lien de consultation à partager (lecture seule, aucun token requis chez le lecteur).
-function gistViewLink(c){ const u=gistDataRawUrl(c); return u?`${location.origin}${location.pathname}?view&data=${encodeURIComponent(u)}`:""; }
+// Si PUBLIC_DATA_URL est renseignée, le lien = simplement l'adresse du site (court).
+function gistViewLink(c){
+  const base=`${location.origin}${location.pathname}`;
+  if(PUBLIC_DATA_URL) return base;
+  const u=gistDataRawUrl(c);
+  return u?`${base}?view&data=${encodeURIComponent(u)}`:"";
+}
 async function gistPush(){
   const c=gistCfg();
   if(!c.token) return {ok:false,msg:"colle d'abord ton token GitHub"};
@@ -1165,7 +1175,7 @@ function bind(){
     const p=$("#gistPanel"); const show=p.style.display==="none";
     p.style.display=show?"block":"none";
     if(show){ const c=gistCfg(); $("#gistToken").value=c.token||""; $("#gistAuto").checked=!!c.auto;
-      $("#gistUrl").value=c.url||""; $("#gistViewUrl").value=gistViewLink(c);
+      $("#gistUrl").value=c.url||""; $("#gistViewUrl").value=gistViewLink(c); $("#gistDataUrl").value=gistDataRawUrl(c);
       $("#gistStatus").textContent=c.id?("Gist actif · "+c.id):""; }});
   $("#gistToken").addEventListener("input",e=>{ const c=gistCfg(); c.token=e.target.value.trim(); gistSave(c); });
   $("#gistAuto").addEventListener("change",e=>{ const c=gistCfg(); c.auto=e.target.checked; gistSave(c);
@@ -1173,7 +1183,7 @@ function bind(){
   $("#gistPublish").addEventListener("click",async()=>{
     const st=$("#gistStatus"); st.textContent="Publication en cours…";
     const r=await gistPush();
-    if(r.ok){ $("#gistUrl").value=r.url; $("#gistViewUrl").value=r.viewLink||gistViewLink();
+    if(r.ok){ $("#gistUrl").value=r.url; $("#gistViewUrl").value=r.viewLink||gistViewLink(); $("#gistDataUrl").value=gistDataRawUrl();
       st.textContent="✓ Publié — agenda + données synchronisés"; toast("Gist publié"); }
     else { st.textContent="✗ Échec : "+r.msg; }});
   $("#gistFetch").addEventListener("click",async()=>{
@@ -1187,7 +1197,7 @@ function bind(){
       MATCHES.forEach(m=>{ if(m.hs!=null && !state.res[m.id]) state.res[m.id]={h:m.hs,a:m.as}; });
       try{ localStorage.setItem(SKEY,JSON.stringify(state)); localStorage.setItem(SYNC_KEY,String(+r.data._savedAt||Date.now())); }catch(e){}
       renderAll();
-      const c=gistCfg(); $("#gistUrl").value=c.url||""; $("#gistViewUrl").value=gistViewLink(c);
+      const c=gistCfg(); $("#gistUrl").value=c.url||""; $("#gistViewUrl").value=gistViewLink(c); $("#gistDataUrl").value=gistDataRawUrl(c);
       st.textContent="✓ Données récupérées"; toast("Données récupérées depuis le cloud");
     }else st.textContent="✗ Échec : "+(r.msg||"Gist introuvable");
   });
@@ -1234,8 +1244,11 @@ function refreshCardState(id){
 (async function(){
   // Mode consultation : ?view (lecture seule) et/ou ?data=<url raw du Gist> (source des données pour un lecteur)
   const params=new URLSearchParams(location.search);
-  VIEW_DATA_URL=params.get("data");
-  READ_ONLY = params.has("view") || (!!VIEW_DATA_URL && !gistCfg().token);
+  const dataSrc = params.get("data") || PUBLIC_DATA_URL || "";
+  VIEW_DATA_URL = dataSrc || null;
+  // Lecture seule pour un visiteur (pas de token) dès qu'une source de données existe, ou si ?view est présent.
+  // ?edit force le mode édition (utile pour TA configuration initiale sur le site en ligne).
+  READ_ONLY = !params.has("edit") && ( params.has("view") || (!gistCfg().token && !!dataSrc) );
   if(READ_ONLY) document.body.classList.add("readonly");
 
   const fg=$("#filtGroup"); Object.keys(GROUPS).forEach(g=>{const o=document.createElement("option"); o.value=g; o.textContent="Groupe "+g; fg.appendChild(o);});
@@ -1247,7 +1260,8 @@ function refreshCardState(id){
   if(!READ_ONLY && gistCfg().token && !gistCfg().id) await gistDiscover();
 
   // Synchro Gist : récupère la version partagée et garde la plus récente (« dernière saisie gagne »).
-  const pull = await gistPull(VIEW_DATA_URL||undefined);
+  // Propriétaire (token) → lecture via l'API GitHub (sans cache) ; visiteur → via l'URL « raw ».
+  const pull = await gistPull(READ_ONLY ? VIEW_DATA_URL : undefined);
   if(pull.ok && pull.data){
     const remoteAt = +pull.data._savedAt || 0;
     const localAt  = +(localStorage.getItem(SYNC_KEY)||0);
