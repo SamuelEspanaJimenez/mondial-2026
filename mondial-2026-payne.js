@@ -203,7 +203,7 @@ function scorerLine(scs,side){
   const list=(scs||[]).filter(s=>s.t===side&&(s.n||"").trim());
   if(!list.length) return "";
   const txt=[...list].sort((a,b)=>firstMin(a)-firstMin(b)).map(s=>{
-    const n=escHtml((s.n||"").trim());
+    const n=escHtml((s.n||"").trim())+(s.csc?" (csc)":"");
     const mins=parseMins(s.m).map(x=>escHtml(x)+"'").join(" ");
     return mins?`${n} ${mins}`:n;
   }).join(", ");
@@ -380,6 +380,7 @@ function renderScorersEditor(id){
         <option value="a" ${s.t==='a'?'selected':''}>${aLbl}</option>
       </select>
       <span class="gmin"><input type="text" inputmode="numeric" placeholder="min. (ex. 75 87)" value="${escHtml(s.m||'')}" data-sc="${id}" data-i="${i}" data-k="m"></span>
+      <label class="gcsc" title="Contre son camp — non comptabilisé au classement"><input type="checkbox" data-sc="${id}" data-i="${i}" data-k="csc" ${s.csc?'checked':''}>csc</label>
       <button class="grm" data-rm="${id}" data-i="${i}" title="Retirer">✕</button>
     </div>`).join("");
   box.innerHTML=`<h4>Buteurs</h4><div class="glist">${rows}</div>
@@ -529,6 +530,7 @@ function renderScorersLB(){
   Object.keys(state.sco).forEach(id=>{
     const t=matchTeams(+id); if(!t.h&&!t.a) return;
     (state.sco[id]||[]).forEach(s=>{
+      if(s.csc) return; // contre son camp : non comptabilisé au classement
       const name=(s.n||"").trim(); if(!name) return;
       const team= s.t==='a'?t.a:t.h; if(!team) return;
       const key=name+"|"+team;
@@ -747,6 +749,7 @@ function renderKO(){
   });
   const hint=$("#thirdHint"); if(hint) hint.textContent=thirdHintText();
   renderTableau(); // garde la vue Tableau synchronisée en permanence avec la Liste
+  if(READ_ONLY){ $("#koBody").style.display="none"; $("#koTableau").style.display="block"; } // consultation : seule la vue Tableau est montrée
 }
 function slotHint(slot){
   if(/^[12][A-L]$/.test(slot)) return (slot[0]==="1"?"1er gr. ":"2e gr. ")+slot[1];
@@ -814,7 +817,7 @@ function buildKoIcs(){
   const esc=s=>String(s).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\n/g,"\\n");
   const out=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//CdM 2026//Phase finale//FR",
     "CALSCALE:GREGORIAN","METHOD:PUBLISH",
-    "X-WR-CALNAME:Coupe du Monde 2026 - Phase finale","X-WR-TIMEZONE:Europe/Paris"];
+    "X-WR-CALNAME:Coupe du Monde 2026 - Phase éliminatoire","X-WR-TIMEZONE:Europe/Paris"];
   KO.forEach(k=>{
     const [Y,Mo,D]=k.d.split("-").map(Number), [h,mi]=k.t.split(":").map(Number);
     const start=new Date(Date.UTC(Y,Mo-1,D,h-2,mi,0)); // Paris CEST = UTC+2
@@ -830,7 +833,7 @@ function buildKoIcs(){
       `DTEND:${fmt(end)}`,
       `SUMMARY:${esc(`${hF}${hName} - ${aName}${aF}`)}`,
       `LOCATION:${esc(k.v)}`,
-      `DESCRIPTION:${esc(`Coupe du Monde 2026\nPhase finale - ${ROUND_LABEL[k.r]} (Match ${k.id})\n${k.v}`)}`,
+      `DESCRIPTION:${esc(`Coupe du Monde 2026\nPhase éliminatoire - ${ROUND_LABEL[k.r]} (Match ${k.id})\n${k.v}`)}`,
       `CATEGORIES:${esc(ROUND_LABEL[k.r])}`,
       "END:VEVENT");
   });
@@ -1195,7 +1198,7 @@ function bind(){
     if(g){const id=+g.dataset.sc,i=+g.dataset.i,k=g.dataset.k;
       state.sco[id]=state.sco[id]||[];
       if(!state.sco[id][i]) state.sco[id][i]={n:"",t:"h",m:""};
-      state.sco[id][i][k]=g.value;
+      state.sco[id][i][k]= k==="csc" ? g.checked : g.value;
       saveState(); renderScorersLB(); refreshScorerLine(id);
       return;}
   });
