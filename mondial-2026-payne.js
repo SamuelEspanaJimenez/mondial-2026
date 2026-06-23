@@ -144,6 +144,7 @@ const ROUND_LABEL = {"16e":"Seizièmes de finale","8e":"Huitièmes de finale","4
 /* ============ STATE + STORAGE ============ */
 const SKEY = "cdm2026_payne_v1";
 const SYNC_KEY = "cdm2026_synced_at_v1"; // horodatage de la dernière synchro Gist connue localement
+const TAB_KEY = "cdm2026_active_tab_v1"; // onglet courant, conservé entre les rechargements de page
 // Optionnel — pour raccourcir le lien de consultation : colle ici l'URL « URL de données » affichée
 // dans le panneau ☁ Sync cloud après ta 1re publication. Une fois remplie, le lien à partager devient
 // simplement l'adresse du site (plus besoin de « ?view&data=… »). Laisse "" si tu n'en veux pas.
@@ -1080,18 +1081,28 @@ function renderProgress(){
 function renderAll(){ renderCal(); renderStandings(); renderScorersLB(); renderKO(); renderMoodCalendar(); renderProgress(); }
 
 /* ============ EVENTS ============ */
+// Active un onglet et mémorise le choix pour le restaurer au rechargement de la page.
+function activateTab(p){
+  const tab=$('.tab[data-p="'+p+'"]'), panel=$("#p-"+p);
+  if(!tab||!panel) return;
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("on")); tab.classList.add("on");
+  document.querySelectorAll(".panel").forEach(x=>x.classList.remove("on")); panel.classList.add("on");
+  hideMoodPop();
+  try{ localStorage.setItem(TAB_KEY,p); }catch(e){}
+  // Rafraîchit le panneau ouvert pour qu'il reflète l'état courant (calendrier ↔ phase finale)
+  if(p==="cal") renderCal();
+  else if(p==="ko") renderKO();
+  else if(p==="stand") renderStandings();
+  else if(p==="sco") renderScorersLB();
+  else if(p==="notes") renderMoodCalendar();
+}
+function restoreTab(){
+  let p=null; try{ p=localStorage.getItem(TAB_KEY); }catch(e){}
+  if(p && $('.tab[data-p="'+p+'"]')) activateTab(p);
+}
 function bind(){
   $("#tabs").addEventListener("click",e=>{const b=e.target.closest(".tab"); if(!b) return;
-    document.querySelectorAll(".tab").forEach(t=>t.classList.remove("on")); b.classList.add("on");
-    document.querySelectorAll(".panel").forEach(p=>p.classList.remove("on"));
-    $("#p-"+b.dataset.p).classList.add("on"); hideMoodPop();
-    // Rafraîchit le panneau ouvert pour qu'il reflète l'état courant (calendrier ↔ phase finale)
-    const p=b.dataset.p;
-    if(p==="cal") renderCal();
-    else if(p==="ko") renderKO();
-    else if(p==="stand") renderStandings();
-    else if(p==="sco") renderScorersLB();
-    else if(p==="notes") renderMoodCalendar();});
+    activateTab(b.dataset.p);});
   $("#filtState").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return;
     $("#filtState").querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
     filt.state=b.dataset.f; renderCal();});
@@ -1280,7 +1291,7 @@ function refreshCardState(id){
   }
 
   MATCHES.forEach(m=>{ if(m.hs!=null && !state.res[m.id]) state.res[m.id]={h:m.hs,a:m.as}; });
-  bind(); renderAll();
+  bind(); renderAll(); restoreTab();
   if(READ_ONLY) toast("Mode consultation — lecture seule");
   else if(memFallback) toast("Sauvegarde locale indisponible (localStorage bloqué) — pense à Exporter");
 })();

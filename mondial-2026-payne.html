@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mondial 2026 — Sessions de Sam Payne</title>
+<title>Mondial 2026</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -295,9 +295,8 @@
   <div class="bar">
     <div class="brandrow">
       <div class="brand">
-        <span class="kicker">USA · Canada · Mexique — 48 équipes</span>
+        <span class="kicker">USA · Canada · Mexique</span>
         <h1>Mondial <span class="yr">2026</span></h1>
-        <span class="sub">Sessions de Sam Payne · heure de Paris · les matchs avant 10 h comptent pour la soirée de la veille</span>
       </div>
       <div class="progwrap">
         <div class="progmeta"><span>Matchs de poule renseignés</span><span><b id="pgN">0</b>/72</span></div>
@@ -336,10 +335,6 @@
       </div>
       <select id="filtGroup"><option value="">Tous les groupes</option></select>
       <input type="search" id="filtTeam" placeholder="Filtrer une équipe…">
-      <div class="legend">
-        <i><span class="dot t"></span> heure = coup d'envoi à Paris</i>
-        <i>scores éditables · ⚽ pour les buteurs</i>
-      </div>
     </div>
     <div id="calBody"></div>
   </section>
@@ -377,7 +372,7 @@
 
   <!-- KNOCKOUT -->
   <section class="panel" id="p-ko">
-    <p class="kintro">Le tableau à élimination directe : 32 matchs du 28 juin au 19 juillet. Les places directes (1ers et 2es de groupe) se pré-remplissent dès que les classements sont décidés. Les <b>8 meilleurs 3es</b> sont placés automatiquement via l'algorithme de l'<b>Annexe C</b> du règlement FIFA (495 combinaisons) une fois les 12 groupes terminés. Le vainqueur de chaque match se propage au tour suivant (en cas d'égalité, choisis le qualifié aux tirs au but). Tu peux toujours corriger une équipe à la main.</p>
+    <p class="kintro">Le tableau à élimination directe : 32 matchs du 28 juin au 19 juillet.Les <b>8 meilleurs 3es</b> sont placés automatiquement via l'algorithme de l'<b>Annexe C</b> du règlement FIFA (495 combinaisons possibles)</p>
     <div class="ko-toggle">
       <div class="seg" id="koView">
         <button class="on" data-v="list">Liste éditable</button>
@@ -423,7 +418,6 @@
 </main>
 
 <footer>
-  <b>Note sur les données.</b> Composition des 12 groupes, calendrier, stades et horaires (heure de Paris) issus du programme officiel de la Coupe du Monde 2026. Les <b>20 premiers scores</b> (jusqu'au 17 juin) sont pré-remplis et restent modifiables ; les buteurs sont à toi. Les horaires des matchs <b>à venir</b> sont exacts ; ceux des matchs déjà joués sont indicatifs. Ton avancement est sauvegardé automatiquement dans ce navigateur — pense à <b>Exporter</b> pour une sauvegarde de secours.
 </footer>
 
 <div class="toast" id="toast"></div>
