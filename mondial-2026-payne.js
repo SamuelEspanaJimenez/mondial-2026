@@ -145,6 +145,7 @@ const ROUND_LABEL = {"16e":"Seizièmes de finale","8e":"Huitièmes de finale","4
 const SKEY = "cdm2026_payne_v1";
 const SYNC_KEY = "cdm2026_synced_at_v1"; // horodatage de la dernière synchro Gist connue localement
 const TAB_KEY = "cdm2026_active_tab_v1"; // onglet courant, conservé entre les rechargements de page
+const NKEY = "cdm2026_notes_v1"; // notes (mood calendar) — PROPRES à chaque navigateur, jamais synchronisées via le Gist
 // Optionnel — pour raccourcir le lien de consultation : colle ici l'URL « URL de données » affichée
 // dans le panneau ☁ Sync cloud après ta 1re publication. Une fois remplie, le lien à partager devient
 // simplement l'adresse du site (plus besoin de « ?view&data=… »). Laisse "" si tu n'en veux pas.
@@ -169,6 +170,15 @@ function saveState(){
     catch(e){ memFallback = true; }
     if(typeof scheduleGistPush==="function") scheduleGistPush();
   },250);
+}
+// Les notes (mood calendar) sont LOCALES : un store séparé, jamais poussé/tiré du Gist.
+// → chaque navigateur a son propre calendrier d'humeur ; un nouvel utilisateur démarre vierge.
+function saveNotes(){ try{ localStorage.setItem(NKEY, JSON.stringify(state.notes||{})); }catch(e){} }
+function loadNotes(){
+  let stored=null;
+  try{ const raw=localStorage.getItem(NKEY); if(raw) stored=JSON.parse(raw); }catch(e){}
+  if(stored){ state.notes=stored; }                 // ce navigateur a déjà ses notes perso
+  else { if(!state.notes) state.notes={}; saveNotes(); } // 1re fois : migre tes notes existantes (sinon vierge) vers le store local
 }
 
 /* ============ HELPERS ============ */
@@ -364,6 +374,7 @@ function koMatchCard(k,res){
       <button class="mexpand ${scs.length?'has':''}" data-exp="${k.id}" title="Buteurs">⚽</button>
     </div>
     <div class="mmeta">📍 ${k.v}${pen}</div>
+    ${ratingRow(k.id)}
     <div class="scorers" id="sco-${k.id}"></div>`;
   return el;
 }
@@ -869,7 +880,7 @@ async function gistPush(){
   if(!c.token) return {ok:false,msg:"colle d'abord ton token GitHub"};
   const ics=buildKoIcs();
   const now=Date.now();
-  const data=JSON.stringify({res:state.res,sco:state.sco,ko:state.ko,notes:state.notes,_savedAt:now},null,2);
+  const data=JSON.stringify({res:state.res,sco:state.sco,ko:state.ko,_savedAt:now},null,2); // notes exclues : personnelles et locales
   const files={[GIST_FILE]:{content:ics},[GIST_DATA_FILE]:{content:data}};
   const hdr={Authorization:"Bearer "+c.token,Accept:"application/vnd.github+json","Content-Type":"application/json"};
   try{
@@ -956,13 +967,45 @@ function ratingRow(id){
 
 /* ============ MOOD CALENDAR (vue mensuelle) ============ */
 let MOOD_DAY_DATA={}; // iso → [matchs du jour triés] (pour la popup)
+// Tous les matchs notables (poule + élimination directe), normalisés pour le mood calendar.
+function ratableMatches(){
+  const res=koResolved();
+  const g=MATCHES.map(m=>{const r=state.res[m.id]||{}; return {id:m.id,d:m.d,t:m.t,h:m.h,a:m.a,hs:r.h,as:r.a,phase:"poule",round:"poule"};});
+  const k=KO.map(x=>{const r=res[x.id]||{},st=state.ko[x.id]||{};
+    return {id:x.id,d:x.d,t:x.t,h:r.h||slotHint(x.sh),a:r.a||slotHint(x.sa),hs:st.hs,as:st.as,phase:"ko",round:x.r};});
+  return g.concat(k);
+}
+// Moyennes de notes par phase, affichées dans l'onglet Notes.
+const PHASE_AVGS=[
+  {label:"Phase de poules", f:m=>m.phase==="poule"},
+  {label:"16es de finale",  f:m=>m.round==="16e"},
+  {label:"8es de finale",   f:m=>m.round==="8e"},
+  {label:"Quarts",          f:m=>m.round==="4e"},
+  {label:"Demi-finales",    f:m=>m.round==="Demi"},
+  {label:"3e place",        f:m=>m.round==="3e place"},
+  {label:"Finale",          f:m=>m.round==="Finale"},
+  {label:"Phase éliminatoire", f:m=>m.phase==="ko"},
+];
+function renderMoodAverages(){
+  const box=$("#moodAverages"); if(!box) return;
+  const all=ratableMatches();
+  box.innerHTML=PHASE_AVGS.map(p=>{
+    const ns=all.filter(p.f).map(m=>state.notes[m.id]).filter(v=>v!=null);
+    if(!ns.length) return `<div class="ma-chip empty"><span class="ma-lbl">${p.label}</span><span class="ma-val">–</span></div>`;
+    const avg=ns.reduce((a,b)=>a+b,0)/ns.length, c=RCFG[Math.max(1,Math.round(avg))];
+    return `<div class="ma-chip"><span class="ma-lbl">${p.label}</span><span class="ma-val" style="color:${c.txt}">${avg.toFixed(1)}</span><span class="ma-cnt">${ns.length} noté${ns.length>1?'s':''}</span></div>`;
+  }).join('');
+}
 function renderMoodCalendar(){
   const wrap=$("#moodBody"); if(!wrap) return;
   const sub=$("#notesSub"), leg=$("#moodLegend");
   wrap.innerHTML="";
 
-  const noted=Object.keys(state.notes).filter(k=>state.notes[k]!=null).length;
-  if(sub) sub.textContent=`${noted} match${noted!==1?'s':''} noté${noted!==1?'s':''} sur 72 · note moyenne : ${noted?( (Object.values(state.notes).filter(v=>v!=null).reduce((a,b)=>a+b,0)/noted).toFixed(1) ):'—'} · survole un jour pour le détail`;
+  const all=ratableMatches(); const total=all.length;
+  const vals=all.map(m=>state.notes[m.id]).filter(v=>v!=null);
+  const noted=vals.length;
+  if(sub) sub.textContent=`${noted} match${noted!==1?'s':''} noté${noted!==1?'s':''} sur ${total} · note moyenne : ${noted?((vals.reduce((a,b)=>a+b,0)/noted).toFixed(1)):'—'} · survole un jour pour le détail`;
+  renderMoodAverages();
 
   if(leg){
     leg.innerHTML='<span>1</span>'
@@ -972,7 +1015,7 @@ function renderMoodCalendar(){
 
   // Regrouper les matchs par jour de visionnage (les <10h comptent pour la veille)
   const byDay={};
-  MATCHES.forEach(m=>{const vd=viewDate(m.d,m.t);(byDay[vd]=byDay[vd]||[]).push(m);});
+  all.forEach(m=>{const vd=viewDate(m.d,m.t);(byDay[vd]=byDay[vd]||[]).push(m);});
   Object.keys(byDay).forEach(k=>byDay[k].sort((a,b)=>effMin(a.t)-effMin(b.t)));
   MOOD_DAY_DATA=byDay;
 
@@ -1015,10 +1058,10 @@ function showMoodPop(cell){
   const ms=MOOD_DAY_DATA[cell.dataset.iso]; if(!ms) return;
   const f=fmtDay(cell.dataset.iso);
   const rows=ms.map(m=>{
-    const r=state.res[m.id], n=state.notes[m.id];
+    const n=state.notes[m.id];
     const c=n!=null?RCFG[n]:null;
-    const done=r&&r.h!==""&&r.a!=="";
-    const sc=done?`${r.h}–${r.a}`:'–';
+    const done=m.hs!=null&&m.hs!==""&&m.as!=null&&m.as!=="";
+    const sc=done?`${m.hs}–${m.as}`:'–';
     return `<div class="mp-m">
       <span class="mp-teams">${flag(m.h)} ${short(m.h)} <span style="color:var(--faint)">v</span> ${short(m.a)} ${flag(m.a)}</span>
       <span class="mp-sc">${sc}</span>
@@ -1126,7 +1169,7 @@ async function loadLatestExport(){
     const latest=files[files.length-1];
     const text=await(await latest.handle.getFile()).text();
     const o=JSON.parse(text);
-    state={res:o.res||{},sco:o.sco||{},ko:o.ko||{},notes:o.notes||{}};
+    state={res:o.res||{},sco:o.sco||{},ko:o.ko||{},notes:state.notes||{}}; // notes locales conservées
     saveState();
     toast(`Chargé : ${latest.name}`);
     return true;
@@ -1221,6 +1264,15 @@ function bind(){
       if(box.classList.contains("open")){box.classList.remove("open");}
       else{renderScorersEditor(id); box.classList.add("open");}
       return;}
+    // Notes éditables même en consultation (personnelles + locales, non synchronisées).
+    const nb=e.target.closest("[data-note]");
+    if(nb){const id=+nb.dataset.note,v=+nb.dataset.v;
+      state.notes[id]=v; saveNotes(); refreshCardState(id); renderMoodCalendar();
+      return;}
+    const nc=e.target.closest("[data-noteclr]");
+    if(nc){const id=+nc.dataset.noteclr;
+      delete state.notes[id]; saveNotes(); refreshCardState(id); renderMoodCalendar();
+      return;}
     if(READ_ONLY) return;
     const add=e.target.closest("[data-add]");
     if(add){const id=+add.dataset.add; state.sco[id]=state.sco[id]||[];
@@ -1231,14 +1283,6 @@ function bind(){
     if(rm){const id=+rm.dataset.rm,i=+rm.dataset.i; state.sco[id].splice(i,1);
       if(!state.sco[id].length){const ex=$('[data-exp="'+id+'"]'); if(ex) ex.classList.remove("has");}
       saveState(); renderScorersEditor(id); renderScorersLB(); refreshScorerLine(id);
-      return;}
-    const nb=e.target.closest("[data-note]");
-    if(nb){const id=+nb.dataset.note,v=+nb.dataset.v;
-      state.notes[id]=v; saveState(); refreshCardState(id); renderMoodCalendar();
-      return;}
-    const nc=e.target.closest("[data-noteclr]");
-    if(nc){const id=+nc.dataset.noteclr;
-      delete state.notes[id]; saveState(); refreshCardState(id); renderMoodCalendar();
       return;}
   });
   $("#koBody").addEventListener("input",e=>{if(READ_ONLY) return; const el=e.target.closest("[data-ko]"); if(!el) return;
@@ -1273,7 +1317,7 @@ function bind(){
     await gistDiscover();
     const r=await gistPull();
     if(r.ok && r.data){
-      state={res:r.data.res||{},sco:r.data.sco||{},ko:r.data.ko||{},notes:r.data.notes||{}};
+      state={res:r.data.res||{},sco:r.data.sco||{},ko:r.data.ko||{},notes:state.notes||{}}; // notes locales conservées
       MATCHES.forEach(m=>{ if(m.hs!=null && !state.res[m.id]) state.res[m.id]={h:m.hs,a:m.as}; });
       try{ localStorage.setItem(SKEY,JSON.stringify(state)); localStorage.setItem(SYNC_KEY,String(+r.data._savedAt||Date.now())); }catch(e){}
       renderAll();
@@ -1306,17 +1350,22 @@ function bind(){
   $("#btnImport").addEventListener("click",()=>$("#fileImport").click());
   $("#fileImport").addEventListener("change",e=>{const f=e.target.files[0]; if(!f) return;
     const rd=new FileReader(); rd.onload=()=>{try{const o=JSON.parse(rd.result);
-      state={res:o.res||{},sco:o.sco||{},ko:o.ko||{},notes:o.notes||{}}; saveState(); renderAll(); toast("Sauvegarde importée");}
+      state={res:o.res||{},sco:o.sco||{},ko:o.ko||{},notes:o.notes||state.notes||{}}; saveState(); saveNotes(); renderAll(); toast("Sauvegarde importée");}
       catch(err){toast("Fichier illisible");}}; rd.readAsText(f); e.target.value="";});
   $("#btnReset").addEventListener("click",()=>{
     if(confirm("Effacer tous les scores et buteurs saisis ? (les 20 résultats officiels seront reposés)")){
-      state={res:{},sco:{},ko:{},notes:{}}; saveState(); renderAll(); toast("Données effacées");}});
+      state={res:{},sco:{},ko:{},notes:state.notes||{}}; saveState(); renderAll(); toast("Données effacées");}}); // notes perso conservées
 }
 function refreshCardState(id){
-  const m=MATCHES.find(x=>x.id===id); if(!m) return;
-  const old=document.querySelector('input[data-id="'+id+'"]'); if(!old) return;
-  const card=old.closest(".match"); const wasOpen=card.querySelector(".scorers").classList.contains("open");
-  const fresh=matchCard(m); card.replaceWith(fresh);
+  // En consultation il n'y a pas d'<input> de score : on retrouve la carte via le bouton de note.
+  const anchor=document.querySelector('input[data-id="'+id+'"]')||document.querySelector('input[data-koid="'+id+'"]')||document.querySelector('[data-note="'+id+'"]');
+  if(!anchor) return;
+  const card=anchor.closest(".match"); if(!card) return;
+  const sb=card.querySelector(".scorers"); const wasOpen=sb&&sb.classList.contains("open");
+  const m=MATCHES.find(x=>x.id===id);
+  const fresh = m ? matchCard(m) : (()=>{const k=KO.find(x=>x.id===id); return k?koMatchCard(k,koResolved()):null;})();
+  if(!fresh) return;
+  card.replaceWith(fresh);
   if(wasOpen){renderScorersEditor(id); $("#sco-"+id).classList.add("open"); const ex=$('[data-exp="'+id+'"]'); if(ex&&(state.sco[id]||[]).length) ex.classList.add("has");}
 }
 
@@ -1330,10 +1379,11 @@ function refreshCardState(id){
   // dès qu'une source de données existe (PUBLIC_DATA_URL ou ?data=) ou si ?view est présent.
   // Pour SAISIR, ajoute ?edit à l'URL (le token reste nécessaire pour publier).
   READ_ONLY = !params.has("edit") && ( params.has("view") || !!dataSrc );
-  if(READ_ONLY) document.body.classList.add("readonly");
+  document.body.classList.add(READ_ONLY ? "readonly" : "editmode");
 
   const fg=$("#filtGroup"); Object.keys(GROUPS).forEach(g=>{const o=document.createElement("option"); o.value=g; o.textContent="Groupe "+g; fg.appendChild(o);});
   await loadState();
+  loadNotes(); // notes locales : charge le store perso (ou migre tes notes existantes au 1er lancement). Doit précéder tout pull Gist.
   // Try to load from the most recent rotating export file (silent — no permission prompt)
   if(!READ_ONLY) await loadLatestExport();
 
@@ -1349,7 +1399,7 @@ function refreshCardState(id){
     const remoteAt = +pull.data._savedAt || 0;
     const localAt  = +(localStorage.getItem(SYNC_KEY)||0);
     if(READ_ONLY || remoteAt > localAt){
-      state = {res:pull.data.res||{}, sco:pull.data.sco||{}, ko:pull.data.ko||{}, notes:pull.data.notes||{}};
+      state = {res:pull.data.res||{}, sco:pull.data.sco||{}, ko:pull.data.ko||{}, notes:state.notes||{}}; // notes locales conservées (jamais tirées du Gist)
       if(!READ_ONLY){
         try{ localStorage.setItem(SKEY, JSON.stringify(state)); localStorage.setItem(SYNC_KEY, String(remoteAt)); }catch(e){}
         toast("Données synchronisées depuis le Gist");
@@ -1361,6 +1411,5 @@ function refreshCardState(id){
 
   MATCHES.forEach(m=>{ if(m.hs!=null && !state.res[m.id]) state.res[m.id]={h:m.hs,a:m.as}; });
   bind(); renderAll(); restoreTab();
-  if(READ_ONLY) toast("Mode consultation — lecture seule");
-  else if(memFallback) toast("Sauvegarde locale indisponible (localStorage bloqué) — pense à Exporter");
+  if(memFallback) toast("Sauvegarde locale indisponible (localStorage bloqué) — pense à Exporter");
 })();
