@@ -1437,7 +1437,10 @@ function renderProgress(){
 function renderAll(){ renderCal(); renderStandings(); renderScorersLB(); renderKO(); renderSim(); renderMoodCalendar(); renderProgress(); }
 
 /* ============ EVENTS ============ */
-// Active un onglet et mémorise le choix pour le restaurer au rechargement de la page.
+// Routing par hash : l'onglet courant est reflété dans l'URL (#cal, #sim, …) → liens profonds partageables.
+const TAB_IDS=["cal","stand","sco","ko","sim","notes"];
+function currentHashTab(){ const h=decodeURIComponent((location.hash||"").slice(1)); return TAB_IDS.includes(h)?h:null; }
+// Active un onglet, mémorise le choix (localStorage) et synchronise l'URL.
 function activateTab(p){
   const tab=$('.tab[data-p="'+p+'"]'), panel=$("#p-"+p);
   if(!tab||!panel) return;
@@ -1445,6 +1448,8 @@ function activateTab(p){
   document.querySelectorAll(".panel").forEach(x=>x.classList.remove("on")); panel.classList.add("on");
   hideMoodPop();
   try{ localStorage.setItem(TAB_KEY,p); }catch(e){}
+  // Garde l'URL alignée sur l'onglet (replaceState → pas de hashchange, pas de boucle, pas d'entrée d'historique parasite).
+  if(currentHashTab()!==p){ try{ history.replaceState(null,"","#"+p); }catch(e){ location.hash=p; } }
   // Rafraîchit le panneau ouvert pour qu'il reflète l'état courant (calendrier ↔ phase finale)
   if(p==="cal") renderCal();
   else if(p==="ko") renderKO();
@@ -1453,13 +1458,17 @@ function activateTab(p){
   else if(p==="sim") renderSim();
   else if(p==="notes") renderMoodCalendar();
 }
+// Au chargement : l'URL (#onglet) prime, sinon le dernier onglet mémorisé, sinon le défaut (Calendrier).
 function restoreTab(){
-  let p=null; try{ p=localStorage.getItem(TAB_KEY); }catch(e){}
+  let p=currentHashTab();
+  if(!p){ try{ p=localStorage.getItem(TAB_KEY); }catch(e){} }
   if(p && $('.tab[data-p="'+p+'"]')) activateTab(p);
 }
 function bind(){
   $("#tabs").addEventListener("click",e=>{const b=e.target.closest(".tab"); if(!b) return;
     activateTab(b.dataset.p);});
+  // Hash modifié manuellement, lien interne suivi, ou navigation arrière/avant → on aligne l'onglet.
+  window.addEventListener("hashchange",()=>{ const p=currentHashTab(); if(p) activateTab(p); });
   $("#filtState").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return;
     $("#filtState").querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
     filt.state=b.dataset.f; renderCal();});
