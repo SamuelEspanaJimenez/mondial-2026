@@ -50,6 +50,7 @@
   .btn{font:inherit; font-size:12px; color:var(--muted); background:var(--panel2); border:1px solid var(--line);
     padding:7px 11px; border-radius:8px; cursor:pointer; transition:.15s; white-space:nowrap}
   .btn:hover{color:var(--ink); border-color:var(--chalk)}
+  .btn:disabled{opacity:.32; cursor:default; pointer-events:none}
   .btn.danger:hover{color:var(--red); border-color:rgba(255,107,107,.5)}
   .tabs{max-width:var(--maxw); margin:0 auto; padding:12px 18px 0; display:flex; gap:4px; overflow-x:auto}
   .tab{font:inherit; font-size:13px; font-weight:600; letter-spacing:.01em; color:var(--muted);
@@ -77,6 +78,7 @@
   .datefilt input[type=date]::-webkit-calendar-picker-indicator{cursor:pointer; opacity:.6; transition:.15s}
   .datefilt input[type=date]:hover::-webkit-calendar-picker-indicator{opacity:1}
   .datefilt .btn{padding:6px 11px}
+  .datefilt .navday{padding:5px 9px; font-size:16px; font-weight:700; line-height:1}
   .hint{font-size:12px; color:var(--muted)}
   .legend{font-size:11.5px; color:var(--muted); margin-left:auto; display:flex; gap:14px; align-items:center; flex-wrap:wrap}
   .legend i{font-style:normal; display:inline-flex; align-items:center; gap:5px}
@@ -127,6 +129,9 @@
   .mexpand:hover{color:var(--amber)}
   .mexpand.has{color:var(--amber)}
   .mmeta{margin-top:7px; font-size:11px; color:var(--faint); display:flex; gap:6px; align-items:center}
+  .seeStand{margin-left:auto; font:inherit; font-size:10.5px; color:var(--faint); background:none; border:0;
+    cursor:pointer; opacity:.5; padding:2px 5px; border-radius:5px; transition:.15s; text-decoration:underline dotted; white-space:nowrap}
+  .seeStand:hover{opacity:1; color:var(--grass)}
   /* scorers editor */
   .scorers{margin-top:10px; padding-top:11px; border-top:1px dashed var(--line); display:none}
   .scorers.open{display:block}
@@ -385,7 +390,9 @@
       <select id="filtGroup"><option value="">Tous les groupes</option></select>
       <input type="search" id="filtTeam" placeholder="Filtrer une équipe…">
       <div class="datefilt">
+        <button class="btn navday" id="filtPrev" title="Jour précédent" aria-label="Jour précédent">‹</button>
         <input type="date" id="filtDate" min="2026-06-11" max="2026-07-19" title="Choisir une date (11 juin → 19 juillet)">
+        <button class="btn navday" id="filtNext" title="Jour suivant" aria-label="Jour suivant">›</button>
         <button class="btn" id="filtToday">Aujourd'hui</button>
         <button class="btn" id="filtDateClear" title="Afficher tous les matchs">Voir tout</button>
       </div>
@@ -396,6 +403,7 @@
   <!-- STANDINGS -->
   <section class="panel" id="p-stand">
     <div class="toolbar">
+      <select id="standGroup"><option value="">Tous les groupes</option></select>
       <div class="legend" style="margin-left:0">
         <i><span class="dot q"></span> 1er–2e : qualifiés</i>
         <i><span class="dot t"></span> 3e : repêchable (8 meilleurs)</i>
@@ -403,7 +411,7 @@
       </div>
     </div>
     <div class="grid" id="standBody"></div>
-    <div class="thirds">
+    <div class="thirds" id="thirdsSection">
       <h2>Meilleurs troisièmes <span class="sb">— les 8 premiers complètent le tableau des 16es</span></h2>
       <div class="tcard" id="thirdsBody"></div>
     </div>
@@ -507,6 +515,6 @@
   </div>
 </div>
 
-<script src="mondial-2026-payne.js?v=8"></script>
+<script src="mondial-2026-payne.js?v=9"></script>
 </body>
 </html>

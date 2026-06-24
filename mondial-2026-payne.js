@@ -295,6 +295,56 @@ function renderCal(){
     items.forEach(it=>sec.appendChild(it.kind==="ko" ? koMatchCard(it.m,koRes) : matchCard(it.m)));
     wrap.appendChild(sec);
   });
+  updateDayNav();
+}
+// Jours (date « vue ») ayant au moins un match selon les filtres courants — hors filtre date.
+// Sert à naviguer de jour en jour avec les flèches sans atterrir sur un jour vide.
+function availableCalDates(){
+  const q=filt.team.toLowerCase();
+  const set=new Set();
+  if(filt.phase!=="ko"){
+    MATCHES.forEach(m=>{
+      const done=state.res[m.id]&&state.res[m.id].h!==""&&state.res[m.id].a!=="";
+      if(filt.state==="up"&&done) return;
+      if(filt.state==="done"&&!done) return;
+      if(filt.group&&m.g!==filt.group) return;
+      if(filt.team&&!(m.h.toLowerCase().includes(q)||m.a.toLowerCase().includes(q)||short(m.h).toLowerCase().includes(q)||short(m.a).toLowerCase().includes(q))) return;
+      set.add(viewDate(m.d,m.t));
+    });
+  }
+  if(filt.phase!=="poule"&&!filt.group){
+    const koRes=koResolved();
+    KO.forEach(k=>{
+      const st=state.ko[k.id]||{};
+      const done=st.hs!==undefined&&st.hs!==""&&st.as!==undefined&&st.as!=="";
+      if(filt.state==="up"&&done) return;
+      if(filt.state==="done"&&!done) return;
+      if(filt.team){const r=koRes[k.id]||{},h=r.h||"",a=r.a||""; if(!(h.toLowerCase().includes(q)||a.toLowerCase().includes(q)||short(h).toLowerCase().includes(q)||short(a).toLowerCase().includes(q))) return;}
+      set.add(viewDate(k.d,k.t));
+    });
+  }
+  return [...set].sort();
+}
+// Active/désactive les flèches selon la position du jour courant dans les jours disponibles.
+function updateDayNav(){
+  const prev=$("#filtPrev"), next=$("#filtNext"); if(!prev||!next) return;
+  const dates=availableCalDates(), cur=filt.date;
+  prev.disabled = !dates.length || (!!cur && cur<=dates[0]);
+  next.disabled = !dates.length || (!!cur && cur>=dates[dates.length-1]);
+}
+// Avance (dir=+1) ou recule (dir=-1) d'un jour ayant des matchs. Sans jour sélectionné, part d'aujourd'hui.
+function stepDay(dir){
+  const dates=availableCalDates(); if(!dates.length) return;
+  let cur=filt.date;
+  if(!cur){
+    const t=todayParisView();
+    cur = dir>0 ? (dates.find(d=>d>=t)||dates[dates.length-1])
+               : ([...dates].reverse().find(d=>d<=t)||dates[0]);
+  }else{
+    const n = dir>0 ? dates.find(d=>d>cur) : [...dates].reverse().find(d=>d<cur);
+    if(!n) return; cur=n;
+  }
+  filt.date=cur; $("#filtDate").value=cur; renderCal();
 }
 function matchCard(m){
   const r=state.res[m.id]||{h:m.hs==null?"":m.hs,a:m.as==null?"":m.as};
@@ -328,7 +378,7 @@ function matchCard(m){
       ${teamCell(m.a,"away",scorerLine(scs,"a"))}
       <button class="mexpand ${scs.length?'has':''}" data-exp="${m.id}" title="Buteurs">⚽</button>
     </div>
-    <div class="mmeta">📍 ${m.v}</div>
+    <div class="mmeta">📍 ${m.v}<button class="seeStand" data-seestand="${m.g}" title="Voir le classement du groupe ${m.g}">voir classement</button></div>
     ${ratingRow(m.id)}
     <div class="scorers" id="sco-${m.id}"></div>`;
   return el;
@@ -508,24 +558,31 @@ function computeGroup(g){
   return result;
 }
 
+let standFilt=""; // "" = tous les groupes ; "A".."L" = un groupe ; "thirds" = Meilleurs 3es
 function renderStandings(){
   const wrap=$("#standBody"); wrap.innerHTML="";
+  const single = standFilt && standFilt!=="thirds"; // vue groupe par groupe → noms entiers (sinon trigrammes)
   const thirds=[];
   Object.keys(GROUPS).forEach(g=>{
     const rows=computeGroup(g);
     thirds.push({...rows[2],g});
-    const card=document.createElement("div"); card.className="gcard";
+    if(single && standFilt!==g) return; // filtre groupe sélectionné
+    const card=document.createElement("div"); card.className="gcard"+(single?" full":""); card.id="gcard-"+g;
     card.innerHTML=`<h3><span class="gtag" style="background:${GCOLOR[g]}">${g}</span> Groupe ${g}</h3>
       <table class="stand"><thead><tr>
         <th class="tm">Équipe</th><th>J</th><th>G</th><th>N</th><th>P</th><th>BP</th><th>BC</th><th>Diff</th><th>Pts</th>
       </tr></thead><tbody>
       ${rows.map((r,i)=>`<tr class="${i===0?'q1':i===1?'q2':i===2?'third':''}">
-        <td class="tm"><span class="cell"><span class="pos">${i+1}</span>${flag(r.t)}<span class="name">${short(r.t)}</span></span></td>
+        <td class="tm"><span class="cell"><span class="pos">${i+1}</span>${flag(r.t)}<span class="name">${single?r.t:short(r.t)}</span></span></td>
         <td>${r.J}</td><td>${r.G}</td><td>${r.N}</td><td>${r.P}</td><td>${r.bp}</td><td>${r.bc}</td>
         <td>${r.diff>0?'+':''}${r.diff}</td><td class="pts">${r.pts}</td></tr>`).join("")}
       </tbody></table>`;
     wrap.appendChild(card);
   });
+
+  // Visibilité selon le filtre : un groupe → cache les 3es ; "Meilleurs 3es" → cache les groupes.
+  const ts=$("#thirdsSection"); if(ts) ts.style.display=(standFilt && standFilt!=="thirds")?"none":"";
+  wrap.style.display=(standFilt==="thirds")?"none":"";
 
   // Best thirds: no H2H (different groups) → pts › GD › BP › wins
   thirds.sort((x,y)=>y.pts-x.pts||y.diff-x.diff||y.bp-x.bp||y.G-x.G);
@@ -538,6 +595,14 @@ function renderStandings(){
       <td>${r.J}</td><td class="pts">${r.pts}</td><td>${r.diff>0?'+':''}${r.diff}</td><td>${r.bp}</td>
       <td style="color:var(--faint);font-size:11px;text-align:right;padding-right:14px">${i<8?'qualifié':'éliminé'}</td></tr>`).join("")}
     </tbody></table>`;
+}
+
+// Ouvre l'onglet Classements filtré sur un groupe (depuis le bouton « voir classement » d'un match).
+function openStandings(g){
+  standFilt=g;
+  const sg=$("#standGroup"); if(sg) sg.value=g;
+  activateTab("stand"); // déclenche renderStandings()
+  const card=$("#gcard-"+g); if(card) card.scrollIntoView({behavior:"smooth",block:"start"});
 }
 
 /* ============ SCORERS LEADERBOARD ============ */
@@ -1282,6 +1347,11 @@ function bind(){
     let v=e.target.value;
     if(v){ if(v<CAL_MIN_DATE) v=CAL_MIN_DATE; else if(v>CAL_MAX_DATE) v=CAL_MAX_DATE; e.target.value=v; }
     filt.date=v; renderCal();});
+  // Mobile : un appui sur le champ ouvre le sélecteur natif (l'icône seule est trop petite à viser).
+  $("#filtDate").addEventListener("click",e=>{ try{ e.target.showPicker&&e.target.showPicker(); }catch(_){} });
+  $("#filtPrev").addEventListener("click",()=>stepDay(-1));
+  $("#filtNext").addEventListener("click",()=>stepDay(1));
+  $("#standGroup").addEventListener("change",e=>{standFilt=e.target.value; renderStandings();});
   $("#filtToday").addEventListener("click",()=>{
     let d=todayParisView();
     if(d<CAL_MIN_DATE) d=CAL_MIN_DATE; else if(d>CAL_MAX_DATE) d=CAL_MAX_DATE;
@@ -1323,6 +1393,8 @@ function bind(){
     if(e.target.closest("input[data-koid]")||e.target.closest("input[data-id]")){ renderCal(); return;}
   });
   $("#calBody").addEventListener("click",e=>{
+    const ss=e.target.closest("[data-seestand]");
+    if(ss){ openStandings(ss.dataset.seestand); return; }
     const ex=e.target.closest("[data-exp]");
     if(ex){const id=+ex.dataset.exp; const box=$("#sco-"+id);
       if(box.classList.contains("open")){box.classList.remove("open");}
@@ -1468,6 +1540,7 @@ function refreshCardState(id){
   document.body.classList.add(READ_ONLY ? "readonly" : "editmode");
 
   const fg=$("#filtGroup"); Object.keys(GROUPS).forEach(g=>{const o=document.createElement("option"); o.value=g; o.textContent="Groupe "+g; fg.appendChild(o);});
+  const sg=$("#standGroup"); if(sg){ Object.keys(GROUPS).forEach(g=>{const o=document.createElement("option"); o.value=g; o.textContent="Groupe "+g; sg.appendChild(o);}); const ot=document.createElement("option"); ot.value="thirds"; ot.textContent="Meilleurs 3es"; sg.appendChild(ot); }
   await loadState();
   loadNotes(); // notes locales : charge le store perso (ou migre tes notes existantes au 1er lancement). Doit précéder tout pull Gist.
   // Try to load from the most recent rotating export file (silent — no permission prompt)
