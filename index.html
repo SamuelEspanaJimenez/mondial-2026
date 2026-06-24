@@ -262,7 +262,9 @@
   body.readonly #btnGistSync,body.readonly #btnKoIcs,body.readonly #gistPanel{display:none!important}
   body.readonly input,body.readonly select,body.readonly textarea,body.readonly .rb,
   body.readonly [data-exp],body.readonly [data-add],body.readonly [data-rm]{pointer-events:none}
-  body.readonly #filtTeam,body.readonly #filtGroup{pointer-events:auto}
+  body.readonly #filtTeam,body.readonly #filtGroup,body.readonly #standGroup{pointer-events:auto}
+  /* Le simulateur reste pleinement utilisable en consultation (pronostic personnel et local). */
+  body.readonly #p-sim input,body.readonly #p-sim [data-simwin]{pointer-events:auto}
   body.readonly .mexpand{display:none}
   body.readonly #koView{display:none}
   /* Les notes (mood) restent éditables même en consultation : elles sont personnelles et locales. */
@@ -305,6 +307,40 @@
   .bm-orig{font-family:"Space Mono",monospace;font-size:8.5px;font-weight:700;color:var(--amber);opacity:.8;margin-left:3px;flex-shrink:0}
   .bm-sc{font-family:"Space Mono",monospace;font-weight:700;font-size:11px;margin-left:auto;min-width:13px;text-align:right;flex-shrink:0}
   .bm-team.win .bm-name,.bm-team.win .bm-sc{color:var(--grass)}
+  /* ---- simulateur bracket ---- */
+  #p-sim .kintro{margin-bottom:16px}
+  .sim-section-hd{font-size:14px;font-weight:700;margin:0 0 11px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .sim-section-hd .sb{font-size:12px;color:var(--muted);font-weight:400}
+  .sim-section-hd .btn{margin-left:auto;font-size:11.5px;padding:5px 10px;flex-shrink:0}
+  /* Section 1 — une carte carrée par groupe ; chaque match : DRAPEAU CODE [score]–[score] CODE DRAPEAU */
+  #simFill{margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:10px;align-items:start}
+  .simgroup{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:8px 11px}
+  .simgroup-hd{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;margin-bottom:5px;color:var(--ink)}
+  .simrow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--line)}
+  .simrow:first-of-type{border-top:0}
+  .simteam{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:600;min-width:0}
+  .simteam.h{justify-content:flex-end}
+  .simteam.a{justify-content:flex-start}
+  .simteam .flag{width:19px}
+  .simteam .st{white-space:nowrap}
+  .simrow .scorebox{flex-shrink:0;gap:3px}
+  .simrow .scorebox input{width:30px;padding:4px 0;font-size:14px}
+  .sim-share{margin:18px 0 6px}
+  /* Section 2 — le tableau tient sur la largeur de l'écran (plus de scroll horizontal) ; appuis tactiles confortables (cellules hautes) */
+  #simBracket .bracket{min-width:0;width:100%;height:780px;gap:2px}
+  #simBracket .b-col{min-width:0;flex:1;padding:0 1px}
+  #simBracket .b-col.b-ctr{min-width:0;flex:1}
+  #simBracket .b-col::after{display:none}
+  #simBracket .bm{padding:6px 6px;font-size:12px;gap:3px;border-radius:9px;overflow:hidden}
+  #simBracket .bm-hdr{font-size:9px;padding-bottom:2px;margin-bottom:1px}
+  #simBracket .bm-team{padding:8px 3px;gap:4px}
+  #simBracket .bm-name{font-size:14px;max-width:none;min-width:0}
+  #simBracket .bm-name.ph{font-size:9.5px;font-weight:500}
+  #simBracket .bm-sc{font-size:14px;min-width:13px}
+  .bm-team.pickable{cursor:pointer;transition:background .12s,border-radius .12s}
+  .bm-team.pickable:hover{background:rgba(57,210,127,.12);border-radius:5px}
+  #simBracket .bm-team.pickable{border-radius:6px}
+  #simBracket .bm-team.pickable:active{background:rgba(57,210,127,.22)}
   /* ---- mood calendar grid ---- */
   .mood-months{display:flex;gap:22px;flex-wrap:wrap;margin-top:10px}
   .mood-month{flex:1;min-width:288px;max-width:420px}
@@ -340,6 +376,16 @@
     .flag{width:22px}
     .grow{grid-template-columns:1fr 78px 72px auto 24px; gap:5px}
     .legend{width:100%;margin-left:0}
+    /* Simulateur — colonnes très étroites sur téléphone : on resserre le tableau pour qu'il tienne en entier */
+    #simFill{grid-template-columns:1fr}
+    #simBracket .bracket{height:640px}
+    #simBracket .bm{padding:4px 3px;font-size:10.5px;border-radius:7px}
+    #simBracket .bm-hdr{font-size:8px}
+    #simBracket .bm-team{padding:6px 2px;gap:2px}
+    #simBracket .bm-name{font-size:11px}
+    #simBracket .bm-name.ph{font-size:8px}
+    #simBracket .bm-sc{font-size:11px;min-width:11px}
+    #simBracket .bm-team .flag{display:none}
   }
 </style>
 </head>
@@ -369,6 +415,7 @@
     <button class="tab" data-p="stand">Classements</button>
     <button class="tab" data-p="sco">Buteurs</button>
     <button class="tab" data-p="ko">Phase éliminatoire</button>
+    <button class="tab" data-p="sim">Simulateur Bracket</button>
     <button class="tab" data-p="notes">Notes</button>
   </nav>
 </header>
@@ -478,6 +525,22 @@
     <div id="koBody"></div>
     <div id="koTableau" style="display:none"></div>
   </section>
+
+  <!-- SIMULATEUR BRACKET -->
+  <section class="panel" id="p-sim">
+    <p class="kintro">Simule la fin du tournoi : renseigne d'abord les scores de poule manquants — le tableau se met à jour tout seul. Ensuite <b>clique sur une équipe</b> dans le tableau pour la qualifier au tour suivant, jusqu'au titre. Puis partage ton pronostic.</p>
+    <h2 class="sim-section-hd">1 · Scores de poule <span class="sb" id="simFillMeta"></span>
+      <button class="btn" id="simResetScores" title="Effacer les scores de poule que tu as saisis (les 20 résultats officiels sont reposés)">↺ Réinitialiser les scores</button>
+    </h2>
+    <div id="simFill"></div>
+    <h2 class="sim-section-hd">2 · Ton tableau final <span class="sb">— clique une équipe pour la faire avancer (re-clique pour annuler)</span>
+      <button class="btn" id="simResetBracket" title="Effacer tous tes choix de vainqueurs dans le tableau">↺ Réinitialiser le bracket</button>
+    </h2>
+    <div id="simBracket"></div>
+    <div class="sim-share">
+      <button class="btn" id="simShare" title="Partager ton pronostic">📤 Partager mon pronostic</button>
+    </div>
+  </section>
 </main>
 
 <footer>
@@ -515,6 +578,6 @@
   </div>
 </div>
 
-<script src="mondial-2026-payne.js?v=9"></script>
+<script src="mondial-2026-payne.js?v=11"></script>
 </body>
 </html>
