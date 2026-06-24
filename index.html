@@ -584,6 +584,15 @@
   </div>
 </div>
 
-<script src="mondial-2026-payne.js?v=11"></script>
+<!-- Chargeur anti-cache : le paramètre « ts » change à chaque ouverture de page, donc toute mise à jour
+     du script (TEAMS, calendrier, résultats codés en dur, etc.) est prise en compte au prochain chargement
+     SANS avoir à vider le cache du navigateur (téléphone ou PC). -->
+<script>
+  (function(){
+    var s=document.createElement('script');
+    s.src='mondial-2026-payne.js?ts='+Date.now();
+    document.body.appendChild(s);
+  })();
+</script>
 </body>
 </html>
