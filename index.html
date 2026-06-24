@@ -330,8 +330,8 @@
   #simBracket .b-col.b-ctr{min-width:0;flex:1}
   #simBracket .b-col::after{display:none}
   #simBracket .bm{padding:6px 6px;font-size:12px;gap:3px;border-radius:9px;overflow:hidden}
-  #simBracket .bm-hdr{font-size:9px;padding-bottom:2px;margin-bottom:1px}
-  #simBracket .bm-team{padding:8px 3px;gap:4px}
+  #simBracket .bm-hdr{display:none}   /* intitulés (M78 / 16e) masqués dans le simulateur → cases plus grandes */
+  #simBracket .bm-team{padding:11px 3px;gap:4px}
   #simBracket .bm-name{font-size:14px;max-width:none;min-width:0}
   #simBracket .bm-name.ph{font-size:9.5px;font-weight:500}
   #simBracket .bm-sc{font-size:14px;min-width:13px}
@@ -384,8 +384,7 @@
     /* Section 2 : tableau « drapeaux uniquement » — colonnes étroites, cibles tactiles = un drapeau par équipe */
     #simBracket .bracket{height:720px}
     #simBracket .bm{padding:4px 2px;border-radius:7px}
-    #simBracket .bm-hdr{font-size:8px}
-    #simBracket .bm-team{padding:5px 1px;gap:1px;justify-content:center}
+    #simBracket .bm-team{padding:9px 1px;gap:1px;justify-content:center}
     #simBracket .bm-team .flag{display:inline-block!important;width:20px}
     #simBracket .bm-name:not(.ph){display:none}      /* équipe résolue → drapeau seul */
     #simBracket .bm-name.ph{font-size:7.5px;line-height:1.05}  /* place encore inconnue → mini libellé */
