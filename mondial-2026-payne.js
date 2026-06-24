@@ -186,6 +186,32 @@ function loadNotes(){
   else { if(!state.notes) state.notes={}; saveNotes(); } // 1re fois : migre tes notes existantes (sinon vierge) vers le store local
 }
 
+/* ============ STORE DE PRONOSTIC (BAC À SABLE) ============ */
+// Mémoire TOTALEMENT séparée des vrais résultats : scores de poule pronostiqués (pred.res) et choix de
+// vainqueurs du tableau (pred.ko). LOCALE à ce navigateur, jamais poussée/tirée du Gist (comme les notes),
+// jamais écrite dans `state` → ne modifie ni les vrais scores, ni l'onglet Classements, ni le calendrier.
+const PKEY="cdm2026_pred_v1";
+let pred={res:{},ko:{}};
+function savePred(){ try{ localStorage.setItem(PKEY, JSON.stringify(pred)); }catch(e){} }
+function loadPred(){
+  try{ const raw=localStorage.getItem(PKEY); if(raw){ const o=JSON.parse(raw)||{}; pred={res:o.res||{},ko:o.ko||{}}; } }catch(e){}
+}
+// Un match de poule a-t-il un VRAI résultat (saisi dans la vue principale) ? → il sort des propositions de pronostic.
+function hasRealRes(id){ const r=state.res[id]; return !!(r&&r.h!==""&&r.a!==""); }
+// Contexte de calcul du PRONOSTIC : vrais scores comme base, complétés par les pronostics là où le vrai score manque.
+// Passé aux fonctions de classement/résolution (computeGroup, koResolved…) à la place du vrai `state`.
+function predCtx(){
+  const res={};
+  MATCHES.forEach(m=>{ const v = hasRealRes(m.id) ? state.res[m.id] : pred.res[m.id]; if(v) res[m.id]=v; });
+  const ko={};
+  KO.forEach(k=>{
+    const real=state.ko[k.id]||{};
+    const realDecisive = real.hs!==undefined&&real.hs!==""&&real.as!==undefined&&real.as!=="";
+    ko[k.id]= realDecisive ? real : (pred.ko[k.id]||{}); // vrai résultat KO prioritaire, sinon pronostic
+  });
+  return {res,ko};
+}
+
 /* ============ HELPERS ============ */
 const $ = s=>document.querySelector(s);
 const flag = name=>{const c=(TEAMS[name]||["",""])[0];
@@ -467,12 +493,13 @@ function refreshScorerLine(id){
 /* ============ TIEBREAKERS ============ */
 
 // Compute head-to-head stats among a subset of teams using only their mutual matches.
-function h2hStats(teams, matchList){
+function h2hStats(teams, matchList, ctx){
+  const RES=(ctx&&ctx.res)||state.res;
   const s={};
   teams.forEach(t=>s[t]={pts:0,gd:0,gf:0});
   matchList.forEach(m=>{
     if(!teams.includes(m.h)||!teams.includes(m.a)) return;
-    const r=state.res[m.id]; if(!r||r.h===""||r.a==="") return;
+    const r=RES[m.id]; if(!r||r.h===""||r.a==="") return;
     const h=+r.h,a=+r.a;
     s[m.h].gf+=h; s[m.h].gd+=h-a;
     s[m.a].gf+=a; s[m.a].gd+=a-h;
@@ -489,11 +516,11 @@ function h2hStats(teams, matchList){
 //   3 = overall GD,  4 = overall goals scored
 // When a criterion separates at least one team, remaining tied sub-groups
 // continue from criterion+1 (never restart from 0 — FIFA 2026 rule).
-function resolveTied(teams, matchList, rowsMap, criterion, groupOrder){
+function resolveTied(teams, matchList, rowsMap, criterion, groupOrder, ctx){
   if(teams.length<=1) return teams;
   if(criterion>4) return [...teams].sort((a,b)=>groupOrder.indexOf(a)-groupOrder.indexOf(b));
 
-  const h2h=criterion<3 ? h2hStats(teams,matchList) : null;
+  const h2h=criterion<3 ? h2hStats(teams,matchList,ctx) : null;
   const val=t=>{
     switch(criterion){
       case 0: return h2h[t].pts;
@@ -514,21 +541,22 @@ function resolveTied(teams, matchList, rowsMap, criterion, groupOrder){
   subgroups.push(cur);
 
   // No separation at this criterion: advance to next
-  if(subgroups.length===1) return resolveTied(teams,matchList,rowsMap,criterion+1,groupOrder);
+  if(subgroups.length===1) return resolveTied(teams,matchList,rowsMap,criterion+1,groupOrder,ctx);
 
   // At least one team separated: continue from next criterion for each remaining sub-group
   return subgroups.flatMap(sg=>
-    sg.length===1 ? sg : resolveTied(sg,matchList,rowsMap,criterion+1,groupOrder)
+    sg.length===1 ? sg : resolveTied(sg,matchList,rowsMap,criterion+1,groupOrder,ctx)
   );
 }
 
 /* ============ STANDINGS ============ */
-function computeGroup(g){
+function computeGroup(g, ctx){
+  const RES=(ctx&&ctx.res)||state.res;
   const rows={};
   GROUPS[g].forEach(t=>rows[t]={t,J:0,G:0,N:0,P:0,bp:0,bc:0,pts:0});
   const gMatches=MATCHES.filter(m=>m.g===g);
   gMatches.forEach(m=>{
-    const r=state.res[m.id]; if(!r||r.h===""||r.a==="") return;
+    const r=RES[m.id]; if(!r||r.h===""||r.a==="") return;
     const h=+r.h,a=+r.a, rh=rows[m.h], ra=rows[m.a];
     rh.J++;ra.J++; rh.bp+=h;rh.bc+=a; ra.bp+=a;ra.bc+=h;
     if(h>a){rh.G++;rh.pts+=3;ra.P++;}
@@ -551,7 +579,7 @@ function computeGroup(g){
       result.push(pg[0]);
     } else {
       const rowsMap=Object.fromEntries(pg.map(r=>[r.t,r]));
-      resolveTied(pg.map(r=>r.t),gMatches,rowsMap,0,GROUPS[g]).forEach(t=>result.push(rowsMap[t]));
+      resolveTied(pg.map(r=>r.t),gMatches,rowsMap,0,GROUPS[g],ctx).forEach(t=>result.push(rowsMap[t]));
     }
     i=j;
   }
@@ -636,10 +664,10 @@ function renderScorersLB(){
 /* ============ KNOCKOUT ============ */
 // Têtes de série directes (1er/2e de chaque groupe) d'après le classement EN COURS.
 // Mises à jour en continu : l'algorithme rejoue à chaque modification d'un classement.
-function seedDirect(){
+function seedDirect(ctx){
   const map={};
   Object.keys(GROUPS).forEach(g=>{
-    const rows=computeGroup(g);
+    const rows=computeGroup(g,ctx);
     map["1"+g]=rows[0].t; map["2"+g]=rows[1].t;
   });
   return map;
@@ -715,26 +743,26 @@ ANNEX_C_RAW.forEach(s=>{
 });
 
 // Classement EN COURS des 12 troisièmes (art. 13), toujours calculé (provisoire).
-function bestThirds(){
+function bestThirds(ctx){
   const thirds=[];
   Object.keys(GROUPS).forEach(g=>{
-    const rows=computeGroup(g);
+    const rows=computeGroup(g,ctx);
     thirds.push({...rows[2],g});
   });
   thirds.sort((x,y)=>y.pts-x.pts||y.diff-x.diff||y.bp-x.bp||y.G-x.G);
   return thirds;
 }
-function groupsAllComplete(){
-  return Object.keys(GROUPS).every(g=>computeGroup(g).every(r=>r.J===3));
+function groupsAllComplete(ctx){
+  return Object.keys(GROUPS).every(g=>computeGroup(g,ctx).every(r=>r.J===3));
 }
 // Affectations colonne→équipe (3e) via l'Annexe C, recalculées à chaque appel.
-function thirdPlaceMapping(){
-  const thirds=bestThirds();
+function thirdPlaceMapping(ctx){
+  const thirds=bestThirds(ctx);
   const top8=thirds.slice(0,8);
   const key=top8.map(x=>x.g).sort().join("");
   const m=ANNEX_C[key]; if(!m) return null;
   const thirdTeam={};
-  Object.keys(GROUPS).forEach(g=>{ thirdTeam[g]=computeGroup(g)[2].t; });
+  Object.keys(GROUPS).forEach(g=>{ thirdTeam[g]=computeGroup(g,ctx)[2].t; });
   const out={};
   Object.keys(m).forEach(col=>{ out[col]=thirdTeam[m[col]]||""; });
   return out;
@@ -750,20 +778,21 @@ function thirdHintText(){
 
 // Origine d'une équipe pour une case de 16e : place directe (1I, 2A) ou meilleur 3e (3X via Annexe C).
 // VISUEL uniquement — jamais inclus dans l'export .ics.
-function originLabel(slot){
+function originLabel(slot, ctx){
   if(/^[12][A-L]$/.test(slot)) return slot;
   if(slot.startsWith("T:")){
     const col=THIRD_POOL_COL[slot];
-    const top8=bestThirds().slice(0,8).map(x=>x.g).sort().join("");
+    const top8=bestThirds(ctx).slice(0,8).map(x=>x.g).sort().join("");
     const m=ANNEX_C[top8];
     const g=(m&&col)?m[col]:"";
     return g?("3"+g):"3e";
   }
   return "";
 }
-function koResolved(){
-  const direct=seedDirect();
-  const thirdMap=thirdPlaceMapping();
+function koResolved(ctx){
+  const koStore=(ctx&&ctx.ko)||state.ko;
+  const direct=seedDirect(ctx);
+  const thirdMap=thirdPlaceMapping(ctx);
   const res={};
   function nameFor(slot){
     if(/^[12][A-L]$/.test(slot)) return direct[slot]||"";
@@ -773,7 +802,7 @@ function koResolved(){
     return "";
   }
   KO.forEach(k=>{
-    const st=state.ko[k.id]||{};
+    const st=koStore[k.id]||{};
     const autoH=nameFor(k.sh), autoA=nameFor(k.sa);
     const h = (st.h&&st.h.trim())?st.h.trim() : autoH;
     const a = (st.a&&st.a.trim())?st.a.trim() : autoA;
@@ -783,6 +812,8 @@ function koResolved(){
       if(+hs>+as){win=h;lose=a;} else if(+as>+hs){win=a;lose=h;}
       else if(st.pen==="h"){win=h;lose=a;} else if(st.pen==="a"){win=a;lose=h;}
     }
+    // Choix manuel du simulateur : départage un match non tranché par le score (clic sur une équipe dans le tableau).
+    if(!win){ if(st.pick==="h"&&h){win=h;lose=a;} else if(st.pick==="a"&&a){win=a;lose=h;} }
     res[k.id]={h,a,win,lose,hs,as};
   });
   return res;
@@ -878,6 +909,99 @@ function renderTableau(){
     ${col(BRACKET.center,'b-ctr')}
     ${col(BRACKET.right.sf)}${col(BRACKET.right.qf)}${col(BRACKET.right.r16)}${col(BRACKET.right.r32)}
   </div></div>`;
+}
+
+/* ============ SIMULATEUR BRACKET ============ */
+// Section 1 : remplissage rapide des scores de poule encore vides (mobile-friendly).
+// Les propositions = matchs SANS vrai résultat. La liste ne se reconstruit pas pendant la saisie (focus préservé) ;
+// elle est régénérée à l'ouverture de l'onglet et quand un vrai score est saisi dans la vue principale.
+// Nombre de matchs de poule encore SANS vrai résultat — donc ouverts au pronostic.
+function simFillMetaText(){
+  const n=MATCHES.filter(m=>!hasRealRes(m.id)).length;
+  return n ? `${n} match${n>1?'s':''} à pronostiquer` : "tous les matchs ont un vrai résultat ✓";
+}
+function renderSimFill(){
+  const wrap=$("#simFill"); if(!wrap) return;
+  const open=MATCHES.filter(m=>!hasRealRes(m.id)); // matchs sans VRAI résultat → pronosticables
+  const meta=$("#simFillMeta"); if(meta) meta.textContent=simFillMetaText();
+  if(!open.length){
+    wrap.innerHTML='<div class="empty">Tous les matchs de poule ont un vrai résultat — le tableau ci-dessous découle directement des vrais classements.</div>';
+    return;
+  }
+  const byG={};
+  open.forEach(m=>{(byG[m.g]=byG[m.g]||[]).push(m);});
+  // Une carte par groupe ; chaque match : DRAPEAU CODE [score]–[score] CODE DRAPEAU. Les cases reflètent TON pronostic (pred.res).
+  wrap.innerHTML=Object.keys(byG).sort().map(g=>`
+    <div class="simgroup">
+      <div class="simgroup-hd"><span class="gtag" style="background:${GCOLOR[g]}">${g}</span> Groupe ${g}</div>
+      ${byG[g].map(m=>{const p=pred.res[m.id]||{}; return `
+        <div class="simrow">
+          <span class="simteam h">${flag(m.h)}<span class="st">${short(m.h)}</span></span>
+          <span class="scorebox">
+            <input class="mono" type="number" min="0" inputmode="numeric" data-simid="${m.id}" data-s="h" value="${p.h??''}">
+            <span class="vs">–</span>
+            <input class="mono" type="number" min="0" inputmode="numeric" data-simid="${m.id}" data-s="a" value="${p.a??''}">
+          </span>
+          <span class="simteam a"><span class="st">${short(m.a)}</span>${flag(m.a)}</span>
+        </div>`;}).join("")}
+    </div>`).join("");
+}
+// Section 2 : le tableau final réactif (contexte de PRONOSTIC), dont les équipes sont cliquables pour choisir un vainqueur.
+function renderSimBracket(){
+  const wrap=$("#simBracket"); if(!wrap) return;
+  const ctx=predCtx();
+  const res=koResolved(ctx);
+  const box=id=>{
+    const k=KO.find(x=>x.id===id); const r=res[id]||{}, st=ctx.ko[id]||{};
+    const hPh=!r.h, aPh=!r.a;
+    const hName=r.h||slotHint(k.sh), aName=r.a||slotHint(k.sa);
+    const hDisp=hPh?hName:(TEAMS[r.h]?short(r.h):r.h);
+    const aDisp=aPh?aName:(TEAMS[r.a]?short(r.a):r.a);
+    const hWin=r.win&&r.win===r.h, aWin=r.win&&r.win===r.a;
+    const sc=v=>(v===undefined||v==="")?"":v;
+    // Match déjà tranché par un score (ou tirs au but) : verrouillé, on n'autorise pas le clic.
+    const hasScore=r.hs!==undefined&&r.hs!==""&&r.as!==undefined&&r.as!=="";
+    const scoreDecides=hasScore&&(+r.hs!==+r.as||st.pen==="h"||st.pen==="a");
+    const hPick=(!hPh&&!scoreDecides), aPick=(!aPh&&!scoreDecides);
+    const at=(can,side)=>can?` data-simwin="${id}" data-side="${side}"`:"";
+    return `<div class="bm ${k.r==='Finale'?'bm-final':''}">
+      <div class="bm-hdr"><span>M${id}</span><span>${RD_SHORT[k.r]}</span></div>
+      <div class="bm-team ${hWin?'win':''} ${hPick?'pickable':''}"${at(hPick,"h")}>${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span><span class="bm-sc">${sc(r.hs)}</span></div>
+      <div class="bm-team ${aWin?'win':''} ${aPick?'pickable':''}"${at(aPick,"a")}>${bmFlag(r.a,aPh)}<span class="bm-name ${aPh?'ph':''}">${aDisp}</span><span class="bm-sc">${sc(r.as)}</span></div>
+    </div>`;
+  };
+  const col=(ids,cls)=>`<div class="b-col ${cls||''}">${ids.map(box).join("")}</div>`;
+  wrap.innerHTML=`<div class="bracket-wrap"><div class="bracket">
+    ${col(BRACKET.left.r32)}${col(BRACKET.left.r16)}${col(BRACKET.left.qf)}${col(BRACKET.left.sf)}
+    ${col(BRACKET.center,'b-ctr')}
+    ${col(BRACKET.right.sf)}${col(BRACKET.right.qf)}${col(BRACKET.right.r16)}${col(BRACKET.right.r32)}
+  </div></div>`;
+}
+function renderSim(){ renderSimFill(); renderSimBracket(); }
+// Texte de partage : le palmarès pronostiqué (champion, finaliste, podium).
+function simShareText(){
+  const res=koResolved(predCtx());
+  const fin=res[104]||{}, tp=res[103]||{};
+  if(!fin.win) return null;
+  const fl=n=>{const t=TEAMS[n]; return t?isoToFlag(t[0])+" ":"";};
+  return ["🏆 Mon pronostic — Coupe du Monde 2026",
+    `Champion : ${fl(fin.win)}${fin.win}`,
+    fin.lose?`Finaliste : ${fl(fin.lose)}${fin.lose}`:null,
+    tp.win?`3e place : ${fl(tp.win)}${tp.win}`:null,
+    tp.lose?`4e place : ${fl(tp.lose)}${tp.lose}`:null
+  ].filter(Boolean).join("\n");
+}
+async function simShare(){
+  const txt=simShareText();
+  if(!txt){ toast("Choisis le vainqueur de la finale pour partager ton pronostic"); return; }
+  const full=txt+"\n"+location.origin+location.pathname;
+  try{
+    if(navigator.share){ await navigator.share({title:"Mon pronostic CDM 2026",text:full}); return; }
+    await navigator.clipboard.writeText(full); toast("Pronostic copié dans le presse-papier");
+  }catch(e){
+    if(e&&e.name==="AbortError") return; // partage annulé par l'utilisateur
+    try{ await navigator.clipboard.writeText(full); toast("Pronostic copié dans le presse-papier"); }catch(_){}
+  }
 }
 
 /* ============ EXPORT .ICS PHASE FINALE (Google Agenda) ============ */
@@ -1310,7 +1434,7 @@ function renderProgress(){
   let n=0; MATCHES.forEach(m=>{const r=state.res[m.id]; if(r&&r.h!==""&&r.a!=="") n++;});
   $("#pgN").textContent=n; $("#pgFill").style.width=(n/72*100)+"%";
 }
-function renderAll(){ renderCal(); renderStandings(); renderScorersLB(); renderKO(); renderMoodCalendar(); renderProgress(); }
+function renderAll(){ renderCal(); renderStandings(); renderScorersLB(); renderKO(); renderSim(); renderMoodCalendar(); renderProgress(); }
 
 /* ============ EVENTS ============ */
 // Active un onglet et mémorise le choix pour le restaurer au rechargement de la page.
@@ -1326,6 +1450,7 @@ function activateTab(p){
   else if(p==="ko") renderKO();
   else if(p==="stand") renderStandings();
   else if(p==="sco") renderScorersLB();
+  else if(p==="sim") renderSim();
   else if(p==="notes") renderMoodCalendar();
 }
 function restoreTab(){
@@ -1390,7 +1515,8 @@ function bind(){
       state.ko[id]=state.ko[id]||{}; state.ko[id].pen=kp.value;
       saveState(); renderKO(); renderCal(); return;}
     // Au blur d'un score (KO ou poule), on rejoue le calendrier pour propager les vainqueurs/équipes des tours suivants
-    if(e.target.closest("input[data-koid]")||e.target.closest("input[data-id]")){ renderCal(); return;}
+    // + on rafraîchit le simulateur : un VRAI score saisi ici fait sortir le match des propositions de pronostic.
+    if(e.target.closest("input[data-koid]")||e.target.closest("input[data-id]")){ renderCal(); renderSim(); return;}
   });
   $("#calBody").addEventListener("click",e=>{
     const ss=e.target.closest("[data-seestand]");
@@ -1423,14 +1549,40 @@ function bind(){
   });
   $("#koBody").addEventListener("input",e=>{if(READ_ONLY) return; const el=e.target.closest("[data-ko]"); if(!el) return;
     const id=+el.dataset.ko,k=el.dataset.k; state.ko[id]=state.ko[id]||{}; state.ko[id][k]=el.value;
-    saveState(); renderKO();});
+    saveState(); renderKO(); renderSim();}); // un vrai résultat KO sert aussi de base au pronostic
   $("#koBody").addEventListener("change",e=>{if(READ_ONLY) return; const el=e.target.closest("select[data-ko]"); if(!el) return;
-    const id=+el.dataset.ko; state.ko[id]=state.ko[id]||{}; state.ko[id].pen=el.value; saveState(); renderKO();});
+    const id=+el.dataset.ko; state.ko[id]=state.ko[id]||{}; state.ko[id].pen=el.value; saveState(); renderKO(); renderSim();});
   $("#koView").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return;
     $("#koView").querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
     if(b.dataset.v==="bracket"){ $("#koBody").style.display="none"; $("#koTableau").style.display="block"; renderTableau(); }
     else { $("#koTableau").style.display="none"; $("#koBody").style.display="block"; }});
   $("#btnKoIcs").addEventListener("click",exportKoIcs);
+  // Simulateur — BAC À SABLE : tout est écrit dans `pred` (local), jamais dans `state`. Aucun impact sur
+  // les vrais scores / Classements / calendrier. Utilisable même en consultation (jamais publié au Gist).
+  $("#simFill").addEventListener("input",e=>{
+    const sc=e.target.closest("input[data-simid]"); if(!sc) return;
+    const id=+sc.dataset.simid, s=sc.dataset.s;
+    pred.res[id]=pred.res[id]||{h:"",a:""}; pred.res[id][s]=sc.value;
+    savePred();
+    renderSimBracket(); // seul le tableau de pronostic réagit (la liste reste en place : le match ne sort que sur un VRAI score)
+  });
+  $("#simBracket").addEventListener("click",e=>{
+    const t=e.target.closest("[data-simwin]"); if(!t) return;
+    const id=+t.dataset.simwin, side=t.dataset.side;
+    pred.ko[id]=pred.ko[id]||{};
+    if(pred.ko[id].pick===side) delete pred.ko[id].pick; else pred.ko[id].pick=side; // re-clic = annule
+    savePred();
+    renderSimBracket();
+  });
+  $("#simShare").addEventListener("click",simShare);
+  $("#simResetScores").addEventListener("click",()=>{
+    if(!confirm("Réinitialiser tous tes pronostics de scores de poule ? (les vrais résultats sont conservés)")) return;
+    pred.res={}; savePred(); renderSim(); toast("Pronostics de poule réinitialisés");
+  });
+  $("#simResetBracket").addEventListener("click",()=>{
+    if(!confirm("Réinitialiser ton tableau de pronostic ? (tous tes choix de vainqueurs seront effacés)")) return;
+    pred.ko={}; savePred(); renderSim(); toast("Tableau de pronostic réinitialisé");
+  });
   $("#btnGistSync").addEventListener("click",()=>{
     const p=$("#gistPanel"); const show=p.style.display==="none";
     p.style.display=show?"block":"none";
@@ -1543,6 +1695,7 @@ function refreshCardState(id){
   const sg=$("#standGroup"); if(sg){ Object.keys(GROUPS).forEach(g=>{const o=document.createElement("option"); o.value=g; o.textContent="Groupe "+g; sg.appendChild(o);}); const ot=document.createElement("option"); ot.value="thirds"; ot.textContent="Meilleurs 3es"; sg.appendChild(ot); }
   await loadState();
   loadNotes(); // notes locales : charge le store perso (ou migre tes notes existantes au 1er lancement). Doit précéder tout pull Gist.
+  loadPred(); // pronostics locaux (bac à sable) : store séparé, jamais synchronisé ni écrit dans `state`.
   // Try to load from the most recent rotating export file (silent — no permission prompt)
   if(!READ_ONLY) await loadLatestExport();
 
