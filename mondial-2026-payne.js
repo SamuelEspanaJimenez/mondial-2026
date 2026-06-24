@@ -150,10 +150,15 @@ const NKEY = "cdm2026_notes_v1"; // notes (mood calendar) — PROPRES à chaque 
 // dans le panneau ☁ Sync cloud après ta 1re publication. Une fois remplie, le lien à partager devient
 // simplement l'adresse du site (plus besoin de « ?view&data=… »). Laisse "" si tu n'en veux pas.
 const PUBLIC_DATA_URL = "https://gist.githubusercontent.com/SamuelEspanaJimenez/e3987737775211feebd0fd93ffdbde90/raw/cdm2026_data.json";
+// URL « raw » du Gist PUBLIC ne contenant QUE le calendrier .ics (poules + phase finale, aucun buteur,
+// aucune donnée privée). Renseignée automatiquement dans les données à chaque publication ; tu peux
+// aussi la coller ici en dur pour qu'elle soit dispo même avant la 1re synchro. Laisse "" sinon.
+const PUBLIC_ICS_URL = "";
 let state = { res:{}, sco:{}, ko:{}, notes:{} };
 let memFallback = false;
 let READ_ONLY = false;     // page de consultation (?view) → aucune saisie possible
 let VIEW_DATA_URL = null;  // URL « raw » du Gist passée aux lecteurs via ?data=
+let VIEW_ICS_URL = null;   // URL du calendrier .ics public à proposer au lecteur (bouton « Exporter Calendrier »)
 
 async function loadState(){
   try{
@@ -290,6 +295,56 @@ function renderCal(){
     items.forEach(it=>sec.appendChild(it.kind==="ko" ? koMatchCard(it.m,koRes) : matchCard(it.m)));
     wrap.appendChild(sec);
   });
+  updateDayNav();
+}
+// Jours (date « vue ») ayant au moins un match selon les filtres courants — hors filtre date.
+// Sert à naviguer de jour en jour avec les flèches sans atterrir sur un jour vide.
+function availableCalDates(){
+  const q=filt.team.toLowerCase();
+  const set=new Set();
+  if(filt.phase!=="ko"){
+    MATCHES.forEach(m=>{
+      const done=state.res[m.id]&&state.res[m.id].h!==""&&state.res[m.id].a!=="";
+      if(filt.state==="up"&&done) return;
+      if(filt.state==="done"&&!done) return;
+      if(filt.group&&m.g!==filt.group) return;
+      if(filt.team&&!(m.h.toLowerCase().includes(q)||m.a.toLowerCase().includes(q)||short(m.h).toLowerCase().includes(q)||short(m.a).toLowerCase().includes(q))) return;
+      set.add(viewDate(m.d,m.t));
+    });
+  }
+  if(filt.phase!=="poule"&&!filt.group){
+    const koRes=koResolved();
+    KO.forEach(k=>{
+      const st=state.ko[k.id]||{};
+      const done=st.hs!==undefined&&st.hs!==""&&st.as!==undefined&&st.as!=="";
+      if(filt.state==="up"&&done) return;
+      if(filt.state==="done"&&!done) return;
+      if(filt.team){const r=koRes[k.id]||{},h=r.h||"",a=r.a||""; if(!(h.toLowerCase().includes(q)||a.toLowerCase().includes(q)||short(h).toLowerCase().includes(q)||short(a).toLowerCase().includes(q))) return;}
+      set.add(viewDate(k.d,k.t));
+    });
+  }
+  return [...set].sort();
+}
+// Active/désactive les flèches selon la position du jour courant dans les jours disponibles.
+function updateDayNav(){
+  const prev=$("#filtPrev"), next=$("#filtNext"); if(!prev||!next) return;
+  const dates=availableCalDates(), cur=filt.date;
+  prev.disabled = !dates.length || (!!cur && cur<=dates[0]);
+  next.disabled = !dates.length || (!!cur && cur>=dates[dates.length-1]);
+}
+// Avance (dir=+1) ou recule (dir=-1) d'un jour ayant des matchs. Sans jour sélectionné, part d'aujourd'hui.
+function stepDay(dir){
+  const dates=availableCalDates(); if(!dates.length) return;
+  let cur=filt.date;
+  if(!cur){
+    const t=todayParisView();
+    cur = dir>0 ? (dates.find(d=>d>=t)||dates[dates.length-1])
+               : ([...dates].reverse().find(d=>d<=t)||dates[0]);
+  }else{
+    const n = dir>0 ? dates.find(d=>d>cur) : [...dates].reverse().find(d=>d<cur);
+    if(!n) return; cur=n;
+  }
+  filt.date=cur; $("#filtDate").value=cur; renderCal();
 }
 function matchCard(m){
   const r=state.res[m.id]||{h:m.hs==null?"":m.hs,a:m.as==null?"":m.as};
@@ -323,7 +378,7 @@ function matchCard(m){
       ${teamCell(m.a,"away",scorerLine(scs,"a"))}
       <button class="mexpand ${scs.length?'has':''}" data-exp="${m.id}" title="Buteurs">⚽</button>
     </div>
-    <div class="mmeta">📍 ${m.v}</div>
+    <div class="mmeta">📍 ${m.v}<button class="seeStand" data-seestand="${m.g}" title="Voir le classement du groupe ${m.g}">voir classement</button></div>
     ${ratingRow(m.id)}
     <div class="scorers" id="sco-${m.id}"></div>`;
   return el;
@@ -503,24 +558,31 @@ function computeGroup(g){
   return result;
 }
 
+let standFilt=""; // "" = tous les groupes ; "A".."L" = un groupe ; "thirds" = Meilleurs 3es
 function renderStandings(){
   const wrap=$("#standBody"); wrap.innerHTML="";
+  const single = standFilt && standFilt!=="thirds"; // vue groupe par groupe → noms entiers (sinon trigrammes)
   const thirds=[];
   Object.keys(GROUPS).forEach(g=>{
     const rows=computeGroup(g);
     thirds.push({...rows[2],g});
-    const card=document.createElement("div"); card.className="gcard";
+    if(single && standFilt!==g) return; // filtre groupe sélectionné
+    const card=document.createElement("div"); card.className="gcard"+(single?" full":""); card.id="gcard-"+g;
     card.innerHTML=`<h3><span class="gtag" style="background:${GCOLOR[g]}">${g}</span> Groupe ${g}</h3>
       <table class="stand"><thead><tr>
         <th class="tm">Équipe</th><th>J</th><th>G</th><th>N</th><th>P</th><th>BP</th><th>BC</th><th>Diff</th><th>Pts</th>
       </tr></thead><tbody>
       ${rows.map((r,i)=>`<tr class="${i===0?'q1':i===1?'q2':i===2?'third':''}">
-        <td class="tm"><span class="cell"><span class="pos">${i+1}</span>${flag(r.t)}<span class="name">${short(r.t)}</span></span></td>
+        <td class="tm"><span class="cell"><span class="pos">${i+1}</span>${flag(r.t)}<span class="name">${single?r.t:short(r.t)}</span></span></td>
         <td>${r.J}</td><td>${r.G}</td><td>${r.N}</td><td>${r.P}</td><td>${r.bp}</td><td>${r.bc}</td>
         <td>${r.diff>0?'+':''}${r.diff}</td><td class="pts">${r.pts}</td></tr>`).join("")}
       </tbody></table>`;
     wrap.appendChild(card);
   });
+
+  // Visibilité selon le filtre : un groupe → cache les 3es ; "Meilleurs 3es" → cache les groupes.
+  const ts=$("#thirdsSection"); if(ts) ts.style.display=(standFilt && standFilt!=="thirds")?"none":"";
+  wrap.style.display=(standFilt==="thirds")?"none":"";
 
   // Best thirds: no H2H (different groups) → pts › GD › BP › wins
   thirds.sort((x,y)=>y.pts-x.pts||y.diff-x.diff||y.bp-x.bp||y.G-x.G);
@@ -533,6 +595,14 @@ function renderStandings(){
       <td>${r.J}</td><td class="pts">${r.pts}</td><td>${r.diff>0?'+':''}${r.diff}</td><td>${r.bp}</td>
       <td style="color:var(--faint);font-size:11px;text-align:right;padding-right:14px">${i<8?'qualifié':'éliminé'}</td></tr>`).join("")}
     </tbody></table>`;
+}
+
+// Ouvre l'onglet Classements filtré sur un groupe (depuis le bouton « voir classement » d'un match).
+function openStandings(g){
+  standFilt=g;
+  const sg=$("#standGroup"); if(sg) sg.value=g;
+  activateTab("stand"); // déclenche renderStandings()
+  const card=$("#gcard-"+g); if(card) card.scrollIntoView({behavior:"smooth",block:"start"});
 }
 
 /* ============ SCORERS LEADERBOARD ============ */
@@ -858,15 +928,58 @@ function exportKoIcs(){
   toast("Calendrier phase finale (.ics) exporté");
 }
 
+/* ============ .ICS COMPLET (poules + phase finale) — pour le Gist PUBLIC partageable ============ */
+// Même format de VEVENT que buildKoIcs (UTC = Paris CEST − 2 h). Contient UNIQUEMENT l'horaire des
+// matchs des deux phases : aucun score, aucun buteur. C'est ce fichier que les lecteurs s'abonnent.
+function buildFullIcs(){
+  const res=koResolved();
+  const p=n=>String(n).padStart(2,"0");
+  const fmt=dt=>`${dt.getUTCFullYear()}${p(dt.getUTCMonth()+1)}${p(dt.getUTCDate())}T${p(dt.getUTCHours())}${p(dt.getUTCMinutes())}${p(dt.getUTCSeconds())}Z`;
+  const stamp=fmt(new Date());
+  const esc=s=>String(s).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\n/g,"\\n");
+  const ev=(uid,start,end,summary,loc,desc,cat)=>["BEGIN:VEVENT",`UID:${uid}`,`DTSTAMP:${stamp}`,
+    `DTSTART:${fmt(start)}`,`DTEND:${fmt(end)}`,`SUMMARY:${esc(summary)}`,`LOCATION:${esc(loc)}`,
+    `DESCRIPTION:${esc(desc)}`,`CATEGORIES:${esc(cat)}`,"END:VEVENT"];
+  const slot=(Y,Mo,D,h,mi)=>{const start=new Date(Date.UTC(Y,Mo-1,D,h-2,mi,0)); return [start,new Date(start.getTime()+2*3600*1000)];};
+  const out=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//CdM 2026//Calendrier complet//FR",
+    "CALSCALE:GREGORIAN","METHOD:PUBLISH",
+    "X-WR-CALNAME:Coupe du Monde 2026","X-WR-TIMEZONE:Europe/Paris"];
+  // Phase de poules — équipes toujours connues
+  MATCHES.forEach(m=>{
+    const [Y,Mo,D]=m.d.split("-").map(Number),[h,mi]=m.t.split(":").map(Number);
+    const [start,end]=slot(Y,Mo,D,h,mi);
+    const hF=TEAMS[m.h]?isoToFlag(TEAMS[m.h][0])+" ":"", aF=TEAMS[m.a]?" "+isoToFlag(TEAMS[m.a][0]):"";
+    out.push(...ev(`cdm2026-poule-${m.id}@worldcup`,start,end,
+      `${hF}${m.h} - ${m.a}${aF}`,m.v,
+      `Coupe du Monde 2026\nPhase de poules - Groupe ${m.g} (Match ${m.id})\n${m.v}`,`Groupe ${m.g}`));
+  });
+  // Phase éliminatoire — équipes remplies en direct si connues, sinon libellé de slot
+  KO.forEach(k=>{
+    const [Y,Mo,D]=k.d.split("-").map(Number),[h,mi]=k.t.split(":").map(Number);
+    const [start,end]=slot(Y,Mo,D,h,mi);
+    const r=res[k.id]||{};
+    const hName=r.h||slotHint(k.sh), aName=r.a||slotHint(k.sa);
+    const hF=(r.h&&TEAMS[r.h])?isoToFlag(TEAMS[r.h][0])+" ":"", aF=(r.a&&TEAMS[r.a])?" "+isoToFlag(TEAMS[r.a][0]):"";
+    out.push(...ev(`cdm2026-ko-${k.id}@worldcup`,start,end,
+      `${hF}${hName} - ${aName}${aF}`,k.v,
+      `Coupe du Monde 2026\nPhase éliminatoire - ${ROUND_LABEL[k.r]} (Match ${k.id})\n${k.v}`,ROUND_LABEL[k.r]));
+  });
+  out.push("END:VCALENDAR");
+  return out.join("\r\n")+"\r\n";
+}
+
 /* ============ AUTO-PUSH GIST GITHUB (abonnement Google Agenda) ============ */
 // Le token reste local (localStorage de ce navigateur) — jamais inclus dans l'export JSON.
 const GIST_KEY="cdm2026_gist_cfg_v1";
 const GIST_FILE="coupe_du_monde_2026_phase_finale.ics";
 const GIST_DATA_FILE="cdm2026_data.json"; // état complet (résultats, scores, KO, notes) — partagé entre PC
+const GIST_CAL_FILE="coupe_du_monde_2026.ics"; // calendrier complet (poules + finale) — Gist PUBLIC séparé, aucun buteur
 function gistCfg(){ try{return JSON.parse(localStorage.getItem(GIST_KEY))||{};}catch(e){return {};} }
 function gistSave(c){ try{localStorage.setItem(GIST_KEY,JSON.stringify(c));}catch(e){} }
 // URL « raw » (toujours la dernière version) du fichier de données — lisible sans token, même pour un Gist secret.
 function gistDataRawUrl(c){ c=c||gistCfg(); return (c.id&&c.login)?`https://gist.githubusercontent.com/${c.login}/${c.id}/raw/${GIST_DATA_FILE}`:""; }
+// URL « raw » du Gist PUBLIC ne contenant que le calendrier .ics — sûre à partager (aucun buteur derrière).
+function gistIcsRawUrl(c){ c=c||gistCfg(); return (c.icsId&&c.login)?`https://gist.githubusercontent.com/${c.login}/${c.icsId}/raw/${GIST_CAL_FILE}`:""; }
 // Lien de consultation à partager (lecture seule, aucun token requis chez le lecteur).
 // Si PUBLIC_DATA_URL est renseignée, le lien = simplement l'adresse du site (court).
 function gistViewLink(c){
@@ -878,11 +991,23 @@ function gistViewLink(c){
 async function gistPush(){
   const c=gistCfg();
   if(!c.token) return {ok:false,msg:"colle d'abord ton token GitHub"};
-  const ics=buildKoIcs();
   const now=Date.now();
-  const data=JSON.stringify({res:state.res,sco:state.sco,ko:state.ko,_savedAt:now},null,2); // notes exclues : personnelles et locales
-  const files={[GIST_FILE]:{content:ics},[GIST_DATA_FILE]:{content:data}};
   const hdr={Authorization:"Bearer "+c.token,Accept:"application/vnd.github+json","Content-Type":"application/json"};
+  // 1) Gist PUBLIC du calendrier — ne contient QUE le .ics complet (deux phases, aucun buteur).
+  //    On le pousse en premier pour connaître son id et embarquer son URL « sûre » dans les données.
+  try{
+    const calFiles={[GIST_CAL_FILE]:{content:buildFullIcs()}};
+    const calRes = c.icsId
+      ? await fetch("https://api.github.com/gists/"+c.icsId,{method:"PATCH",headers:hdr,body:JSON.stringify({files:calFiles})})
+      : await fetch("https://api.github.com/gists",{method:"POST",headers:hdr,body:JSON.stringify({description:"Coupe du Monde 2026 — Calendrier (public)",public:true,files:calFiles})});
+    if(calRes.ok){ const cd=await calRes.json(); c.icsId=cd.id; c.login=(cd.owner&&cd.owner.login)||c.login; gistSave(c); }
+    else if(calRes.status===404 && c.icsId){ delete c.icsId; gistSave(c); } // gist supprimé côté GitHub → on le recréera
+  }catch(e){ /* best-effort : si le calendrier public échoue, on publie quand même les données */ }
+  // 2) Gist (secret) des données — résultats/buteurs + URL du calendrier public pour les lecteurs.
+  const ics=buildKoIcs();
+  const icsUrl=gistIcsRawUrl(c);
+  const data=JSON.stringify({res:state.res,sco:state.sco,ko:state.ko,_icsUrl:icsUrl,_savedAt:now},null,2); // notes exclues : personnelles et locales
+  const files={[GIST_FILE]:{content:ics},[GIST_DATA_FILE]:{content:data}};
   try{
     const res = c.id
       ? await fetch("https://api.github.com/gists/"+c.id,{method:"PATCH",headers:hdr,body:JSON.stringify({files})})
@@ -895,8 +1020,9 @@ async function gistPush(){
     c.id=d.id; c.login=(d.owner&&d.owner.login)||c.login;
     c.url=`https://gist.githubusercontent.com/${c.login}/${c.id}/raw/${GIST_FILE}`;
     gistSave(c);
+    VIEW_ICS_URL = gistIcsRawUrl(c) || VIEW_ICS_URL;
     try{ localStorage.setItem(SYNC_KEY, String(now)); }catch(e){} // notre local est désormais à jour avec le Gist
-    return {ok:true,url:c.url,viewLink:gistViewLink(c)};
+    return {ok:true,url:c.url,viewLink:gistViewLink(c),icsUrl:gistIcsRawUrl(c)};
   }catch(e){ return {ok:false,msg:"réseau/CORS bloqué ("+e.message+")"}; }
 }
 // Retrouve, à partir du seul token, le Gist déjà créé (utile sur un 2e PC) et mémorise son id/login.
@@ -925,7 +1051,10 @@ async function gistPull(rawUrl){
     }else{
       const url=rawUrl || gistDataRawUrl(c);
       if(!url) return {ok:false,msg:"pas de Gist configuré"};
-      const res=await fetch(url, {cache:"no-store"});
+      // Paramètre unique : casse le cache CDN (Fastly) de GitHub, qui sinon sert une copie périmée
+      // (effet « une modif en retard ») — `no-store` ne touche que le cache du navigateur, pas le CDN.
+      const bust=url+(url.includes("?")?"&":"?")+"_cb="+Date.now();
+      const res=await fetch(bust, {cache:"no-store"});
       if(!res.ok) return {ok:false,msg:"HTTP "+res.status};
       o=JSON.parse(await res.text());
     }
@@ -1218,6 +1347,11 @@ function bind(){
     let v=e.target.value;
     if(v){ if(v<CAL_MIN_DATE) v=CAL_MIN_DATE; else if(v>CAL_MAX_DATE) v=CAL_MAX_DATE; e.target.value=v; }
     filt.date=v; renderCal();});
+  // Mobile : un appui sur le champ ouvre le sélecteur natif (l'icône seule est trop petite à viser).
+  $("#filtDate").addEventListener("click",e=>{ try{ e.target.showPicker&&e.target.showPicker(); }catch(_){} });
+  $("#filtPrev").addEventListener("click",()=>stepDay(-1));
+  $("#filtNext").addEventListener("click",()=>stepDay(1));
+  $("#standGroup").addEventListener("change",e=>{standFilt=e.target.value; renderStandings();});
   $("#filtToday").addEventListener("click",()=>{
     let d=todayParisView();
     if(d<CAL_MIN_DATE) d=CAL_MIN_DATE; else if(d>CAL_MAX_DATE) d=CAL_MAX_DATE;
@@ -1259,6 +1393,8 @@ function bind(){
     if(e.target.closest("input[data-koid]")||e.target.closest("input[data-id]")){ renderCal(); return;}
   });
   $("#calBody").addEventListener("click",e=>{
+    const ss=e.target.closest("[data-seestand]");
+    if(ss){ openStandings(ss.dataset.seestand); return; }
     const ex=e.target.closest("[data-exp]");
     if(ex){const id=+ex.dataset.exp; const box=$("#sco-"+id);
       if(box.classList.contains("open")){box.classList.remove("open");}
@@ -1337,6 +1473,20 @@ function bind(){
   $("#moodBody").addEventListener("click",e=>{const c=e.target.closest(".mday.has"); if(c) showMoodPop(c);});
   $("#moodBody").addEventListener("mouseout",e=>{const c=e.target.closest(".mday.has"); if(!c) return;
     if(e.relatedTarget && c.contains(e.relatedTarget)) return; hideMoodPop();});
+  // Mode consultation : bouton « Exporter Calendrier » → fenêtre avec l'URL d'abonnement + instructions.
+  const vc=$("#btnViewerCal"); if(vc) vc.addEventListener("click",openCalModal);
+  const cm=$("#calModal");
+  if(cm){
+    cm.addEventListener("click",e=>{ if(e.target===cm||e.target.closest("[data-calclose]")) closeCalModal(); });
+    const cc=$("#calCopy");
+    if(cc) cc.addEventListener("click",async()=>{
+      const u=$("#calUrl").value;
+      if(!u){ toast("Calendrier pas encore publié — réessaie plus tard"); return; }
+      try{ await navigator.clipboard.writeText(u); toast("URL du calendrier copiée"); }
+      catch(e){ const el=$("#calUrl"); el.focus(); el.select(); }
+    });
+    document.addEventListener("keydown",e=>{ if(e.key==="Escape" && cm.classList.contains("show")) closeCalModal(); });
+  }
   $("#btnExport").addEventListener("click",async()=>{
     const ok=await exportToDir();
     if(!ok){
@@ -1356,6 +1506,14 @@ function bind(){
     if(confirm("Effacer tous les scores et buteurs saisis ? (les 20 résultats officiels seront reposés)")){
       state={res:{},sco:{},ko:{},notes:state.notes||{}}; saveState(); renderAll(); toast("Données effacées");}}); // notes perso conservées
 }
+function openCalModal(){
+  const url=VIEW_ICS_URL||"";
+  const inp=$("#calUrl"); if(inp) inp.value=url;
+  const warn=$("#calNoUrl"); if(warn) warn.style.display=url?"none":"block";
+  const cm=$("#calModal"); if(cm) cm.classList.add("show");
+}
+function closeCalModal(){ const cm=$("#calModal"); if(cm) cm.classList.remove("show"); }
+
 function refreshCardState(id){
   // En consultation il n'y a pas d'<input> de score : on retrouve la carte via le bouton de note.
   const anchor=document.querySelector('input[data-id="'+id+'"]')||document.querySelector('input[data-koid="'+id+'"]')||document.querySelector('[data-note="'+id+'"]');
@@ -1382,6 +1540,7 @@ function refreshCardState(id){
   document.body.classList.add(READ_ONLY ? "readonly" : "editmode");
 
   const fg=$("#filtGroup"); Object.keys(GROUPS).forEach(g=>{const o=document.createElement("option"); o.value=g; o.textContent="Groupe "+g; fg.appendChild(o);});
+  const sg=$("#standGroup"); if(sg){ Object.keys(GROUPS).forEach(g=>{const o=document.createElement("option"); o.value=g; o.textContent="Groupe "+g; sg.appendChild(o);}); const ot=document.createElement("option"); ot.value="thirds"; ot.textContent="Meilleurs 3es"; sg.appendChild(ot); }
   await loadState();
   loadNotes(); // notes locales : charge le store perso (ou migre tes notes existantes au 1er lancement). Doit précéder tout pull Gist.
   // Try to load from the most recent rotating export file (silent — no permission prompt)
@@ -1408,6 +1567,10 @@ function refreshCardState(id){
   }else if(!READ_ONLY && VIEW_DATA_URL===null && gistCfg().id){
     toast("Synchro Gist indisponible ("+pull.msg+")");
   }
+
+  // URL du calendrier .ics à proposer au lecteur : priorité aux données synchronisées (_icsUrl),
+  // sinon constante en dur, sinon dérivée de notre propre config (côté propriétaire).
+  VIEW_ICS_URL = (pull.ok && pull.data && pull.data._icsUrl) || PUBLIC_ICS_URL || gistIcsRawUrl() || "";
 
   MATCHES.forEach(m=>{ if(m.hs!=null && !state.res[m.id]) state.res[m.id]={h:m.hs,a:m.as}; });
   bind(); renderAll(); restoreTab();
