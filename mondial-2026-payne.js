@@ -1,18 +1,18 @@
 "use strict";
 /* ============ DATA ============ */
 const TEAMS = {
- "Mexique":["mx","MEX"],"Afrique du Sud":["za","RSA"],"Corée du Sud":["kr","KOR"],"Tchéquie":["cz","CZE"],
- "Canada":["ca","CAN"],"Bosnie-Herzégovine":["ba","BIH"],"Qatar":["qa","QAT"],"Suisse":["ch","SUI"],
- "Écosse":["gb-sct","SCO"],"Maroc":["ma","MAR"],"Brésil":["br","BRA"],"Haïti":["ht","HAI"],
+ "Mexique":["mx","MEX"],"Afrique du Sud":["za","AFS"],"Corée du Sud":["kr","COR"],"Tchéquie":["cz","TCH"],
+ "Canada":["ca","CAN"],"Bosnie-Herzégovine":["ba","BOS"],"Qatar":["qa","QAT"],"Suisse":["ch","SUI"],
+ "Écosse":["gb-sct","ECO"],"Maroc":["ma","MAR"],"Brésil":["br","BRE"],"Haïti":["ht","HAI"],
  "États-Unis":["us","USA"],"Australie":["au","AUS"],"Turquie":["tr","TUR"],"Paraguay":["py","PAR"],
- "Allemagne":["de","GER"],"Côte d'Ivoire":["ci","CIV"],"Équateur":["ec","ECU"],"Curaçao":["cw","CUW"],
- "Suède":["se","SWE"],"Japon":["jp","JPN"],"Pays-Bas":["nl","NED"],"Tunisie":["tn","TUN"],
+ "Allemagne":["de","ALL"],"Côte d'Ivoire":["ci","CIV"],"Équateur":["ec","ECU"],"Curaçao":["cw","CUR"],
+ "Suède":["se","SUE"],"Japon":["jp","JAP"],"Pays-Bas":["nl","P-B"],"Tunisie":["tn","TUN"],
  "Nouvelle-Zélande":["nz","NZL"],"Iran":["ir","IRN"],"Belgique":["be","BEL"],"Égypte":["eg","EGY"],
- "Uruguay":["uy","URU"],"Arabie Saoudite":["sa","KSA"],"Espagne":["es","ESP"],"Cap-Vert":["cv","CPV"],
- "Norvège":["no","NOR"],"France":["fr","FRA"],"Sénégal":["sn","SEN"],"Irak":["iq","IRQ"],
+ "Uruguay":["uy","URU"],"Arabie Saoudite":["sa","ASA"],"Espagne":["es","ESP"],"Cap-Vert":["cv","CPV"],
+ "Norvège":["no","NOR"],"France":["fr","FRA"],"Sénégal":["sn","SEN"],"Irak":["iq","IRK"],
  "Argentine":["ar","ARG"],"Autriche":["at","AUT"],"Jordanie":["jo","JOR"],"Algérie":["dz","ALG"],
- "Portugal":["pt","POR"],"RD Congo":["cd","COD"],"Ouzbékistan":["uz","UZB"],"Colombie":["co","COL"],
- "Angleterre":["gb-eng","ENG"],"Croatie":["hr","CRO"],"Ghana":["gh","GHA"],"Panama":["pa","PAN"]
+ "Portugal":["pt","POR"],"RD Congo":["cd","COD"],"Ouzbékistan":["uz","OUZ"],"Colombie":["co","COL"],
+ "Angleterre":["gb-eng","ANG"],"Croatie":["hr","CRO"],"Ghana":["gh","GHA"],"Panama":["pa","PAN"]
 };
 const GROUPS = {
  A:["Mexique","Afrique du Sud","Corée du Sud","Tchéquie"],

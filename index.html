@@ -312,15 +312,13 @@
   .sim-section-hd{font-size:14px;font-weight:700;margin:0 0 11px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .sim-section-hd .sb{font-size:12px;color:var(--muted);font-weight:400}
   .sim-section-hd .btn{margin-left:auto;font-size:11.5px;padding:5px 10px;flex-shrink:0}
-  /* Section 1 — une carte carrée par groupe ; chaque match : DRAPEAU CODE [score]–[score] CODE DRAPEAU */
-  #simFill{margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:10px;align-items:start}
+  /* Section 1 — tuiles de groupe en grille (plusieurs par ligne) ; chaque match centré : DRAPEAU CODE [score]–[score] CODE DRAPEAU (pas d'étirement → pas de vide autour des trigrammes) */
+  #simFill{margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;align-items:start}
   .simgroup{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:8px 11px}
   .simgroup-hd{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;margin-bottom:5px;color:var(--ink)}
-  .simrow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--line)}
+  .simrow{display:flex;align-items:center;justify-content:center;gap:7px;padding:5px 0;border-top:1px solid var(--line)}
   .simrow:first-of-type{border-top:0}
-  .simteam{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:600;min-width:0}
-  .simteam.h{justify-content:flex-end}
-  .simteam.a{justify-content:flex-start}
+  .simteam{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600}
   .simteam .flag{width:19px}
   .simteam .st{white-space:nowrap}
   .simrow .scorebox{flex-shrink:0;gap:3px}
@@ -376,16 +374,24 @@
     .flag{width:22px}
     .grow{grid-template-columns:1fr 78px 72px auto 24px; gap:5px}
     .legend{width:100%;margin-left:0}
-    /* Simulateur — colonnes très étroites sur téléphone : on resserre le tableau pour qu'il tienne en entier */
-    #simFill{grid-template-columns:1fr}
-    #simBracket .bracket{height:640px}
-    #simBracket .bm{padding:4px 3px;font-size:10.5px;border-radius:7px}
+    /* ----- Simulateur sur téléphone ----- */
+    /* Section 1 : 2 tuiles de groupe par ligne ; trigramme seul (les drapeaux ne tiennent pas) */
+    #simFill{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+    .simgroup{padding:7px 8px}
+    .simrow{gap:6px}
+    .simteam .flag{display:none}
+    .simrow .scorebox input{width:26px;font-size:13px}
+    /* Section 2 : tableau « drapeaux uniquement » — colonnes étroites, cibles tactiles = un drapeau par équipe */
+    #simBracket .bracket{height:720px}
+    #simBracket .bm{padding:4px 2px;border-radius:7px}
     #simBracket .bm-hdr{font-size:8px}
-    #simBracket .bm-team{padding:6px 2px;gap:2px}
-    #simBracket .bm-name{font-size:11px}
-    #simBracket .bm-name.ph{font-size:8px}
-    #simBracket .bm-sc{font-size:11px;min-width:11px}
-    #simBracket .bm-team .flag{display:none}
+    #simBracket .bm-team{padding:5px 1px;gap:1px;justify-content:center}
+    #simBracket .bm-team .flag{display:inline-block!important;width:20px}
+    #simBracket .bm-name:not(.ph){display:none}      /* équipe résolue → drapeau seul */
+    #simBracket .bm-name.ph{font-size:7.5px;line-height:1.05}  /* place encore inconnue → mini libellé */
+    #simBracket .bm-sc{display:none}                 /* pas de score sur mobile : uniquement les drapeaux */
+    #simBracket .bm-team.win{background:rgba(57,210,127,.20);border-radius:5px}
+    #simBracket .bm-team.win .flag{box-shadow:0 0 0 2px var(--grass)}
   }
 </style>
 </head>
