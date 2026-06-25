@@ -1625,10 +1625,31 @@ function renderAll(){ renderCal(); renderStandings(); renderScorersLB(); renderK
 // Routing par hash : l'onglet courant est reflété dans l'URL (#cal, #sim, …) → liens profonds partageables.
 const TAB_IDS=["cal","stand","sco","ko","sim","notes"];
 function currentHashTab(){ const h=decodeURIComponent((location.hash||"").slice(1)); return TAB_IDS.includes(h)?h:null; }
+// Scroll mémorisé par onglet : on y revient lorsqu'on rouvre l'onglet ; 1re visite → comportement par défaut
+// (Calendrier → matchs du jour ; autres → haut de page).
+const tabScroll={};
+let restoringTab=false; // vrai pendant la restauration initiale → on n'enregistre pas le scroll de l'onglet par défaut (jamais réellement vu)
+function applyTabScroll(p){
+  if(p in tabScroll){                                  // déjà visité → on restaure sa position
+    const y=tabScroll[p];
+    window.scrollTo({top:y,behavior:"auto"});
+    navLastY=y;
+  } else if(p==="cal"){                                // 1re visite du Calendrier → ligne du jour
+    scrollToToday();
+  } else {                                             // 1re visite d'un autre onglet → haut de page
+    window.scrollTo({top:0,behavior:"auto"});
+    navLastY=0;
+  }
+  const header=document.querySelector("header"); if(header) header.classList.remove("nav-hidden");
+}
 // Active un onglet, mémorise le choix (localStorage) et synchronise l'URL.
 function activateTab(p,dir){
   const tab=$('.tab[data-p="'+p+'"]'), panel=$("#p-"+p);
   if(!tab||!panel) return;
+  const prevOn=document.querySelector(".panel.on");
+  const prevId=prevOn?prevOn.id.replace("p-",""):null;
+  const same=prevId===p;
+  if(prevId && !same && !restoringTab) tabScroll[prevId]=window.scrollY||window.pageYOffset||0; // mémorise le scroll quitté
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("on")); tab.classList.add("on");
   document.querySelectorAll(".panel").forEach(x=>x.classList.remove("on","swipe-next","swipe-prev"));
   panel.classList.add("on");
@@ -1648,13 +1669,15 @@ function activateTab(p,dir){
   else if(p==="sco") renderScorersLB();
   else if(p==="sim") renderSim();
   else if(p==="notes") renderMoodCalendar();
-  if(typeof updateFab==="function") updateFab(); // le rôle du bouton flottant dépend de l'onglet
+  if(!same) applyTabScroll(p);                          // positionne le scroll du nouvel onglet (mémorisé ou défaut)
+  if(typeof updateFab==="function") updateFab();         // le rôle du bouton flottant dépend de l'onglet
 }
 // Au chargement : l'URL (#onglet) prime, sinon le dernier onglet mémorisé, sinon le défaut (Calendrier).
 function restoreTab(){
   let p=currentHashTab();
   if(!p){ try{ p=localStorage.getItem(TAB_KEY); }catch(e){} }
-  if(p && $('.tab[data-p="'+p+'"]')) activateTab(p);
+  if(!p || !$('.tab[data-p="'+p+'"]')) p="cal";
+  restoringTab=true; activateTab(p); restoringTab=false; // restauration : pas d'enregistrement du scroll par défaut
 }
 // Onglet courant (depuis le bouton actif), puis bascule de `dir` crans (+1 suivant, -1 précédent).
 function stepTab(dir){
@@ -2048,10 +2071,12 @@ function refreshCardState(id){
 
   MATCHES.forEach(m=>{ if(m.hs!=null && !state.res[m.id]) state.res[m.id]={h:m.hs,a:m.as}; });
   bind(); renderAll(); restoreTab();
-  // À l'ouverture, si on est sur le calendrier, on se positionne sur le jour courant.
-  const onCal=document.querySelector(".panel.on");
-  if(onCal&&onCal.id==="p-cal"){ requestAnimationFrame(()=>requestAnimationFrame(()=>{ scrollToToday(); updateFab(); })); }
-  else updateFab();
+  // Positionnement initial du scroll de l'onglet actif (après mise en page : Calendrier → jour courant ; autres → haut).
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    const on=document.querySelector(".panel.on");
+    if(on) applyTabScroll(on.id.replace("p-",""));
+    updateFab();
+  }));
   scheduleSettleRefresh(); // maj auto du tableau Officiel à chaque match franchissant les 2h
 
   if(memFallback) toast("Sauvegarde locale indisponible (localStorage bloqué) — pense à Exporter");

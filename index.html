@@ -63,14 +63,15 @@
   .tab.on{color:var(--ink); border-bottom-color:var(--grass)}
   /* ---- layout ---- */
   main{max-width:var(--maxw); margin:0 auto; padding:18px}
-  .panel{display:none; animation:fade .25s ease}
+  .panel{display:none; animation:fade .34s cubic-bezier(.22,.61,.36,1)}
   .panel.on{display:block}
-  @keyframes fade{from{opacity:0; transform:translateY(4px)}to{opacity:1; transform:none}}
+  @keyframes fade{from{opacity:0; transform:translateY(9px)}to{opacity:1; transform:none}}
   /* Glissement directionnel lors d'un swipe entre onglets (mobile) */
-  .panel.on.swipe-next{animation:slideFromRight .26s ease}
-  .panel.on.swipe-prev{animation:slideFromLeft .26s ease}
-  @keyframes slideFromRight{from{opacity:0; transform:translateX(34px)}to{opacity:1; transform:none}}
-  @keyframes slideFromLeft{from{opacity:0; transform:translateX(-34px)}to{opacity:1; transform:none}}
+  .panel.on.swipe-next{animation:slideFromRight .34s cubic-bezier(.22,.61,.36,1)}
+  .panel.on.swipe-prev{animation:slideFromLeft .34s cubic-bezier(.22,.61,.36,1)}
+  @keyframes slideFromRight{from{opacity:0; transform:translateX(42px)}to{opacity:1; transform:none}}
+  @keyframes slideFromLeft{from{opacity:0; transform:translateX(-42px)}to{opacity:1; transform:none}}
+  @media (prefers-reduced-motion:reduce){ .panel,.panel.on.swipe-next,.panel.on.swipe-prev{animation-duration:.01ms} }
   .toolbar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:16px}
   .seg{display:inline-flex; background:var(--panel2); border:1px solid var(--line); border-radius:8px; overflow:hidden}
   .seg button{font:inherit; font-size:12px; color:var(--muted); background:none; border:0; padding:7px 12px; cursor:pointer}
