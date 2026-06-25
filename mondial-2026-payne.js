@@ -1071,6 +1071,29 @@ function renderTableau(){
     ${col(BRACKET.right.sf)}${col(BRACKET.right.qf)}${col(BRACKET.right.r16)}${col(BRACKET.right.r32)}
   </div></div>`;
 }
+// Rafraîchit le tableau au moment EXACT où le prochain match franchit le seuil des 2h (coup d'envoi + 2h),
+// pour que le mode Officiel se mette à jour seul, sans rechargement. Préserve le défilement du bracket.
+let settleTimer=null;
+function scheduleSettleRefresh(){
+  if(settleTimer){ clearTimeout(settleTimer); settleTimer=null; }
+  const now=Date.now();
+  let next=Infinity;
+  [...MATCHES,...KO].forEach(m=>{
+    if(!m.d||!m.t) return;
+    const k=Date.parse(m.d+"T"+m.t+":00+02:00"); if(!isFinite(k)) return;
+    const settleAt=k+SETTLE_MS;
+    if(settleAt>now && settleAt<next) next=settleAt;
+  });
+  if(!isFinite(next)) return; // plus aucun match à venir
+  const delay=Math.min(next-now+1000, 2**31-1); // +1s de marge ; borne le setTimeout
+  settleTimer=setTimeout(()=>{
+    const wrap=document.querySelector("#koTableau .bracket-wrap");
+    const sl=wrap?wrap.scrollLeft:0;
+    renderTableau();
+    const w2=document.querySelector("#koTableau .bracket-wrap"); if(w2) w2.scrollLeft=sl; // restaure le scroll
+    scheduleSettleRefresh(); // planifie le match suivant
+  }, delay);
+}
 
 /* ============ SIMULATEUR BRACKET ============ */
 // Section 1 : remplissage rapide des scores de poule encore vides (mobile-friendly).
@@ -2029,5 +2052,7 @@ function refreshCardState(id){
   const onCal=document.querySelector(".panel.on");
   if(onCal&&onCal.id==="p-cal"){ requestAnimationFrame(()=>requestAnimationFrame(()=>{ scrollToToday(); updateFab(); })); }
   else updateFab();
+  scheduleSettleRefresh(); // maj auto du tableau Officiel à chaque match franchissant les 2h
+
   if(memFallback) toast("Sauvegarde locale indisponible (localStorage bloqué) — pense à Exporter");
 })();
