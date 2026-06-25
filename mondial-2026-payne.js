@@ -293,7 +293,11 @@ function scorersStrip(scs){
   const h=sideScorersText(scs,"h"), a=sideScorersText(scs,"a");
   if(!h&&!a) return "";
   const block=(txt,cls)=>txt?`<div class="ms-side ${cls}"><span class="ms-ball">⚽</span><span class="ms-names">${txt}</span></div>`:"";
-  return `<div class="mscorers">${block(h,"ms-home")}${block(a,"ms-away")}</div>`;
+  // L'équipe ayant marqué le plus tôt est affichée en haut (chacune garde son alignement).
+  const earliest=side=>Math.min(...(scs||[]).filter(s=>s.t===side&&(s.n||"").trim()).map(firstMin),Infinity);
+  const hb=block(h,"ms-home"), ab=block(a,"ms-away");
+  const order = earliest("h")<=earliest("a") ? hb+ab : ab+hb;
+  return `<div class="mscorers">${order}</div>`;
 }
 function effMin(t){const[h,m]=t.split(":").map(Number); return h<10 ? (h+24)*60+m : h*60+m;}
 function viewDate(d,t){const h=+t.split(":")[0]; if(h>=10) return d;
@@ -1609,6 +1613,7 @@ function activateTab(p,dir){
   else if(p==="sco") renderScorersLB();
   else if(p==="sim") renderSim();
   else if(p==="notes") renderMoodCalendar();
+  if(typeof updateFab==="function") updateFab(); // le rôle du bouton flottant dépend de l'onglet
 }
 // Au chargement : l'URL (#onglet) prime, sinon le dernier onglet mémorisé, sinon le défaut (Calendrier).
 function restoreTab(){
@@ -1626,23 +1631,51 @@ function stepTab(dir){
   if(ni<0||ni>=TAB_IDS.length) return; // bornes : pas de bouclage
   activateTab(TAB_IDS[ni],dir);
 }
-// Au chargement : positionne le calendrier sur le jour courant (ou, jour de repos, le prochain jour à matchs).
-function scrollToToday(){
-  const body=$("#calBody"); if(!body) return;
+// Section « du jour » dans le calendrier (ou, jour de repos, le prochain jour à matchs, sinon le dernier passé).
+function todaySection(){
+  const body=$("#calBody"); if(!body) return null;
   const today=todayParisView();
-  let sec=body.querySelector(".session.is-today");
-  if(!sec){ // pas de match aujourd'hui → premier jour à venir, sinon le dernier passé
-    const all=[...body.querySelectorAll(".session[data-date]")];
-    sec=all.find(s=>s.dataset.date>=today)||all[all.length-1];
-  }
-  if(!sec) return;
+  return body.querySelector(".session.is-today")
+    || [...body.querySelectorAll(".session[data-date]")].find(s=>s.dataset.date>=today)
+    || [...body.querySelectorAll(".session[data-date]")].pop()
+    || null;
+}
+// Positionne le calendrier sur le jour courant (au chargement : instantané ; via le bouton : défilement fluide).
+function scrollToToday(smooth){
+  const sec=todaySection(); if(!sec) return;
   const header=document.querySelector("header");
   const off=(header?header.offsetHeight:0)+10;
   const y=sec.getBoundingClientRect().top+(window.scrollY||window.pageYOffset||0)-off;
   const top=Math.max(0,Math.round(y));
-  window.scrollTo({top,behavior:"auto"});
+  window.scrollTo({top,behavior:smooth?"smooth":"auto"});
   navLastY=top; // évite que ce défilement programmé déclenche le masquage du header
   if(header) header.classList.remove("nav-hidden");
+}
+// Bouton flottant contextuel : « Aujourd'hui » si la ligne du jour est hors écran (onglet Calendrier),
+// sinon « Haut » (retour en haut). Masqué tout en haut de page.
+function updateFab(){
+  const fab=$("#fab"); if(!fab) return;
+  const y=window.scrollY||window.pageYOffset||0;
+  if(y<=40){ fab.classList.remove("show"); return; } // près du sommet → rien à proposer
+  const onCal=(document.querySelector(".panel.on")||{}).id==="p-cal";
+  let mode="top";
+  if(onCal){
+    const sec=todaySection();
+    if(sec){
+      const header=document.querySelector("header");
+      const hH=header?header.offsetHeight:0;
+      const r=sec.getBoundingClientRect();
+      const visible = r.bottom>hH+12 && r.top<window.innerHeight-12;
+      if(!visible){ mode = r.top<0 ? "today-up" : "today-down"; }
+    }
+  }
+  if(fab.dataset.mode!==mode){
+    fab.dataset.mode=mode;
+    const ICON={top:"↑","today-up":"↑","today-down":"↓"};
+    const LABEL={top:"Haut","today-up":"Aujourd'hui","today-down":"Aujourd'hui"};
+    fab.innerHTML=`<span class="fab-ico">${ICON[mode]}</span>${LABEL[mode]}`;
+  }
+  fab.classList.add("show");
 }
 // Header escamotable : disparaît en défilant vers le bas, réapparaît au défilement vers le haut ou en haut de page.
 let navLastY=0;
@@ -1658,9 +1691,15 @@ function bindHeaderHide(){
       if(y>navLastY && y>header.offsetHeight) header.classList.add("nav-hidden");   // vers le bas → on cache
       else if(y<navLastY) header.classList.remove("nav-hidden");                    // vers le haut → on montre
     }
-    navLastY=y; ticking=false;
+    navLastY=y; updateFab(); ticking=false;
   }
   window.addEventListener("scroll",()=>{ if(!ticking){ ticking=true; requestAnimationFrame(update); } },{passive:true});
+  // Action du bouton flottant selon son mode courant.
+  const fab=$("#fab");
+  if(fab) fab.addEventListener("click",()=>{
+    if((fab.dataset.mode||"").startsWith("today")) scrollToToday(true);
+    else window.scrollTo({top:0,behavior:"smooth"});
+  });
 }
 // Swipe horizontal entre onglets (mobile). Ignore les zones à défilement horizontal
 // (bracket, barre d'onglets) et les champs de saisie pour ne pas voler leurs gestes.
@@ -1976,6 +2015,7 @@ function refreshCardState(id){
   bind(); renderAll(); restoreTab();
   // À l'ouverture, si on est sur le calendrier, on se positionne sur le jour courant.
   const onCal=document.querySelector(".panel.on");
-  if(onCal&&onCal.id==="p-cal"){ requestAnimationFrame(()=>requestAnimationFrame(scrollToToday)); }
+  if(onCal&&onCal.id==="p-cal"){ requestAnimationFrame(()=>requestAnimationFrame(()=>{ scrollToToday(); updateFab(); })); }
+  else updateFab();
   if(memFallback) toast("Sauvegarde locale indisponible (localStorage bloqué) — pense à Exporter");
 })();

@@ -372,6 +372,19 @@
   .md-cnt{font-size:9px;color:var(--faint);margin-top:1px;display:block}
   .md-dots{display:flex;gap:2px;flex-wrap:wrap;margin-top:3px}
   .md-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
+  /* bouton flottant contextuel (aujourd'hui / haut) */
+  .fab{position:fixed; right:16px; bottom:18px; z-index:40;
+    display:inline-flex; align-items:center; gap:6px;
+    font:inherit; font-size:12px; font-weight:600; letter-spacing:.01em; color:var(--ink);
+    background:rgba(21,42,33,.82); border:1px solid var(--line); border-radius:999px;
+    padding:9px 13px; cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,.42); backdrop-filter:blur(8px);
+    opacity:0; transform:translateY(10px) scale(.96); pointer-events:none;
+    transition:opacity .25s ease, transform .25s ease, color .15s, border-color .15s}
+  .fab.show{opacity:.92; transform:none; pointer-events:auto}
+  .fab:hover{opacity:1; color:var(--grass); border-color:var(--chalk)}
+  .fab .fab-ico{font-size:13px; line-height:1; font-weight:700}
+  @media (max-width:640px){ .fab{right:12px; bottom:14px; padding:8px 12px} }
+  @media (prefers-reduced-motion:reduce){ .fab{transition:opacity .25s ease} }
   /* popover */
   .mood-pop{position:fixed;z-index:45;background:var(--panel2);border:1px solid rgba(214,230,223,.22);
     border-radius:10px;padding:10px 12px;min-width:215px;max-width:295px;
@@ -575,6 +588,7 @@
 <footer>
 </footer>
 
+<button class="fab" id="fab" data-mode="" type="button" aria-label="Naviguer"></button>
 <div class="toast" id="toast"></div>
 <div class="mood-pop" id="moodPop"></div>
 
