@@ -211,6 +211,42 @@ function predCtx(){
   });
   return {res,ko};
 }
+// Migration unique : convertit les anciens choix par position ('h'/'a') vers le nouveau format
+// { pick: <équipe gagnante>, opp: <adversaire> }. Sans ça, les brackets déjà remplis seraient perdus.
+function migratePredPicks(){
+  try{
+    if(!pred||!pred.ko) return;
+    const hasOld=Object.values(pred.ko).some(s=>s&&(s.pick==="h"||s.pick==="a"));
+    if(!hasOld) return;
+    const ctx=predCtx();
+    const direct=seedDirect(ctx), thirdMap=thirdPlaceMapping(ctx);
+    const res={};
+    const nameFor=slot=>{
+      if(/^[12][A-L]$/.test(slot)) return direct[slot]||"";
+      if(slot[0]==="V"){const w=+slot.slice(1); return res[w]?res[w].win:"";}
+      if(slot[0]==="P"){const w=+slot.slice(1); return res[w]?res[w].lose:"";}
+      if(slot.startsWith("T:")){const col=THIRD_POOL_COL[slot]; return (thirdMap&&col)?(thirdMap[col]||""):"";}
+      return "";
+    };
+    KO.forEach(k=>{
+      const st=pred.ko[k.id]||{};
+      const h=(st.h&&st.h.trim())||nameFor(k.sh)||"";
+      const a=(st.a&&st.a.trim())||nameFor(k.sa)||"";
+      let win="",lose="";
+      const hs=st.hs,as=st.as;
+      if(hs!==undefined&&hs!==""&&as!==undefined&&as!==""){
+        if(+hs>+as){win=h;lose=a;} else if(+as>+hs){win=a;lose=h;}
+        else if(st.pen==="h"){win=h;lose=a;} else if(st.pen==="a"){win=a;lose=h;}
+      }
+      if(!win){ if(st.pick==="h"&&h){win=h;lose=a;} else if(st.pick==="a"&&a){win=a;lose=h;} } // ancien format (position)
+      res[k.id]={h,a,win,lose};
+      if(st.pick==="h"||st.pick==="a"){ // conversion → {pick: vainqueur, opp: adversaire}
+        if(win){ st.pick=win; st.opp=lose; } else { delete st.pick; delete st.opp; }
+      }
+    });
+    savePred();
+  }catch(e){}
+}
 
 /* ============ HELPERS ============ */
 const $ = s=>document.querySelector(s);
@@ -586,6 +622,75 @@ function computeGroup(g, ctx){
   return result;
 }
 
+/* ===== Positions ACQUISES (mode « officiel ») =====
+   Une équipe n'est affichée à une position que si elle y est mathématiquement certaine,
+   QUELS QUE SOIENT les résultats des matchs de groupe restants.
+   On énumère les 3^k issues (Victoire/Nul/Défaite) des matchs restants du groupe ; pour chaque
+   issue, l'ordre d'une paire n'est « tranché » que s'il NE dépend PAS d'une marge de buts libre :
+     • écart de points strict ;
+     • points en confrontation directe (H2H) au sein du sous-groupe à égalité de points
+       (ex. : Allemagne et Côte d'Ivoire à égalité, mais l'Allemagne a battu la CIV → Allemagne devant) ;
+     • égalité résiduelle réglée par la diff./BP générale UNIQUEMENT si plus aucun match restant
+       pour les deux équipes (sinon la marge reste manipulable → indéterminé).
+   Une équipe est « acquise » à un rang ssi ce rang est identique dans TOUTES les issues.
+   Renvoie { locked } : locked[équipe] = index 0-based de la position acquise, ou null. */
+function clinchGroup(g, ctx){
+  const RES=(ctx&&ctx.res)||state.res;
+  const teams=GROUPS[g];
+  const gMatches=MATCHES.filter(m=>m.g===g);
+  const played=id=>{const r=RES[id]; return r&&r.h!==""&&r.a!=="";};
+  const rem=gMatches.filter(m=>!played(m.id));
+  const anyRem={}; teams.forEach(t=>anyRem[t]=rem.some(m=>m.h===t||m.a===t));
+
+  // Points + diff/BP/victoires déjà acquis (matchs joués uniquement)
+  const basePts={}, ovGD={}, ovGF={}, ovW={};
+  teams.forEach(t=>{basePts[t]=0;ovGD[t]=0;ovGF[t]=0;ovW[t]=0;});
+  const playedOC={};
+  gMatches.forEach(m=>{ if(!played(m.id))return; const r=RES[m.id], h=+r.h, a=+r.a;
+    ovGD[m.h]+=h-a; ovGD[m.a]+=a-h; ovGF[m.h]+=h; ovGF[m.a]+=a;
+    if(h>a){basePts[m.h]+=3;ovW[m.h]++;playedOC[m.id]='h';}
+    else if(a>h){basePts[m.a]+=3;ovW[m.a]++;playedOC[m.id]='a';}
+    else {basePts[m.h]++;basePts[m.a]++;playedOC[m.id]='d';} });
+
+  const n=rem.length;
+  const rankSet={}, ambig={}; teams.forEach(t=>{rankSet[t]=new Set();ambig[t]=false;});
+  const total=Math.pow(3,n);
+  for(let e=0;e<total;e++){
+    const oc=Object.assign({},playedOC);
+    let x=e; rem.forEach(m=>{const o=x%3; x=(x-o)/3; oc[m.id]= o===0?'h':o===1?'d':'a';});
+    const pts={}; teams.forEach(t=>pts[t]=basePts[t]);
+    rem.forEach(m=>{const o=oc[m.id]; if(o==='h')pts[m.h]+=3; else if(o==='a')pts[m.a]+=3; else{pts[m.h]++;pts[m.a]++;}});
+
+    const h2hPts=B=>{const hp={}; B.forEach(t=>hp[t]=0);
+      gMatches.forEach(m=>{ if(!B.includes(m.h)||!B.includes(m.a))return; const o=oc[m.id];
+        if(o==='h')hp[m.h]+=3; else if(o==='a')hp[m.a]+=3; else{hp[m.h]++;hp[m.a]++;} }); return hp;};
+
+    const rel=(T,U)=>{
+      if(pts[T]>pts[U]) return 'above';
+      if(pts[T]<pts[U]) return 'below';
+      const B=teams.filter(t=>pts[t]===pts[T]);
+      const hp=h2hPts(B);
+      if(hp[T]>hp[U]) return 'above';   // plus de points en H2H au sein du sous-groupe → devant
+      if(hp[T]<hp[U]) return 'below';
+      if(B.length>2) return '?';        // 3+ ex æquo non départagés par le H2H → diff manipulable
+      if(anyRem[T]||anyRem[U]) return '?'; // une marge reste à jouer → indéterminé
+      if(ovGD[T]!==ovGD[U]) return ovGD[T]>ovGD[U]?'above':'below';
+      if(ovGF[T]!==ovGF[U]) return ovGF[T]>ovGF[U]?'above':'below';
+      if(ovW[T]!==ovW[U]) return ovW[T]>ovW[U]?'above':'below';
+      return '?';                       // tirage au sort
+    };
+
+    for(const T of teams){
+      let above=0, hasAmbig=false;
+      for(const U of teams){ if(U===T)continue; const r=rel(T,U);
+        if(r==='below')above++; else if(r==='?')hasAmbig=true; }
+      if(hasAmbig) ambig[T]=true; else rankSet[T].add(above);
+    }
+  }
+  const locked={}; teams.forEach(t=>{ locked[t]=(!ambig[t]&&rankSet[t].size===1)?[...rankSet[t]][0]:null; });
+  return {locked};
+}
+
 let standFilt=""; // "" = tous les groupes ; "A".."L" = un groupe ; "thirds" = Meilleurs 3es
 function renderStandings(){
   const wrap=$("#standBody"); wrap.innerHTML="";
@@ -666,6 +771,16 @@ function renderScorersLB(){
 // Mises à jour en continu : l'algorithme rejoue à chaque modification d'un classement.
 function seedDirect(ctx){
   const map={};
+  // Mode « officiel » (ctx.official) : on ne place le 1er/2e d'un groupe que s'il est
+  // mathématiquement ACQUIS à cette position (cf. clinchGroup). Sinon → "" (placeholder).
+  if(ctx&&ctx.official){
+    Object.keys(GROUPS).forEach(g=>{
+      const {locked}=clinchGroup(g,ctx);
+      map["1"+g]=""; map["2"+g]="";
+      Object.keys(locked).forEach(t=>{ if(locked[t]===0)map["1"+g]=t; else if(locked[t]===1)map["2"+g]=t; });
+    });
+    return map;
+  }
   Object.keys(GROUPS).forEach(g=>{
     const rows=computeGroup(g,ctx);
     map["1"+g]=rows[0].t; map["2"+g]=rows[1].t;
@@ -757,6 +872,10 @@ function groupsAllComplete(ctx){
 }
 // Affectations colonne→équipe (3e) via l'Annexe C, recalculées à chaque appel.
 function thirdPlaceMapping(ctx){
+  // Mode « officiel » : le classement des 3es n'est figé que lorsque les 12 troisièmes sont
+  // connus ET définitifs (tous les matchs de groupe joués). Avant cela, ils se répartissent
+  // différemment dans le tableau selon les groupes d'origine → on ne place aucun 3e.
+  if(ctx&&ctx.official&&!groupsAllComplete(ctx)) return null;
   const thirds=bestThirds(ctx);
   const top8=thirds.slice(0,8);
   const key=top8.map(x=>x.g).sort().join("");
@@ -812,8 +931,15 @@ function koResolved(ctx){
       if(+hs>+as){win=h;lose=a;} else if(+as>+hs){win=a;lose=h;}
       else if(st.pen==="h"){win=h;lose=a;} else if(st.pen==="a"){win=a;lose=h;}
     }
-    // Choix manuel du simulateur : départage un match non tranché par le score (clic sur une équipe dans le tableau).
-    if(!win){ if(st.pick==="h"&&h){win=h;lose=a;} else if(st.pick==="a"&&a){win=a;lose=h;} }
+    // Choix manuel du simulateur : départage un match non tranché par le score (clic sur une équipe).
+    // Le choix est mémorisé par ÉQUIPE (st.pick = vainqueur) + son ADVERSAIRE au moment du clic (st.opp).
+    // Il n'est appliqué que si le match a toujours EXACTEMENT ces deux équipes ; sinon le choix est obsolète
+    // (vainqueur OU adversaire a changé suite à un vrai score) → ignoré → ce match et toute la suite du
+    // parcours se réinitialisent en cascade (les tours suivants ne retrouvent plus l'équipe attendue).
+    if(!win && st.pick){
+      if(st.pick===h && st.opp===a){win=h;lose=a;}
+      else if(st.pick===a && st.opp===h){win=a;lose=h;}
+    }
     res[k.id]={h,a,win,lose,hs,as};
   });
   return res;
@@ -861,7 +987,7 @@ function renderKO(){
   });
   const hint=$("#thirdHint"); if(hint) hint.textContent=thirdHintText();
   renderTableau(); // garde la vue Tableau synchronisée en permanence avec la Liste
-  if(READ_ONLY){ $("#koBody").style.display="none"; $("#koTableau").style.display="block"; } // consultation : seule la vue Tableau est montrée
+  if(READ_ONLY){ $("#koBody").style.display="none"; $("#koTableau").style.display="block"; const bb=$("#bracketModeBar"); if(bb) bb.style.display=""; } // consultation : seule la vue Tableau est montrée
 }
 function slotHint(slot){
   if(/^[12][A-L]$/.test(slot)) return (slot[0]==="1"?"1er gr. ":"2e gr. ")+slot[1];
@@ -884,9 +1010,16 @@ function bmFlag(name,isPh){
   const c=(TEAMS[name]||["",""])[0];
   return c?`<img class="flag" style="width:16px" src="https://flagcdn.com/h20/${c}.png" alt="" loading="lazy" onerror="this.style.display='none'">`:"";
 }
+let bracketMode="proj"; // "proj" = équipes projetées d'après les classements actuels ; "off" = positions acquises uniquement
 function renderTableau(){
   const wrap=$("#koTableau"); if(!wrap) return;
-  const res=koResolved();
+  const official = bracketMode==="off";
+  const ctx = official ? {res:state.res, ko:state.ko, official:true} : undefined;
+  const res=koResolved(ctx);
+  const hint=$("#bracketModeHint");
+  if(hint) hint.textContent = official
+    ? "Seules les équipes mathématiquement certaines de leur place sont positionnées (les 3es n'apparaissent qu'une fois tous connus)."
+    : "Tableau projeté d'après les classements actuels (comme si les scores étaient finaux).";
   const box=id=>{
     const k=KO.find(x=>x.id===id); const r=res[id]||{};
     const hPh=!r.h, aPh=!r.a;
@@ -895,8 +1028,8 @@ function renderTableau(){
     const aDisp=aPh?aName:(TEAMS[r.a]?short(r.a):r.a);
     const hWin=r.win&&r.win===r.h, aWin=r.win&&r.win===r.a;
     const sc=v=>(v===undefined||v==="")?"":v;
-    const oH=(k.r==="16e"&&!hPh)?originLabel(k.sh):"";
-    const oA=(k.r==="16e"&&!aPh)?originLabel(k.sa):"";
+    const oH=(k.r==="16e"&&!hPh)?originLabel(k.sh,ctx):"";
+    const oA=(k.r==="16e"&&!aPh)?originLabel(k.sa,ctx):"";
     return `<div class="bm ${k.r==='Finale'?'bm-final':''}">
       <div class="bm-hdr"><span>M${id}</span><span>${RD_SHORT[k.r]}</span></div>
       <div class="bm-team ${hWin?'win':''}">${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span>${oH?`<span class="bm-orig">${oH}</span>`:''}<span class="bm-sc">${sc(r.hs)}</span></div>
@@ -963,11 +1096,12 @@ function renderSimBracket(){
     const hasScore=r.hs!==undefined&&r.hs!==""&&r.as!==undefined&&r.as!=="";
     const scoreDecides=hasScore&&(+r.hs!==+r.as||st.pen==="h"||st.pen==="a");
     const hPick=(!hPh&&!scoreDecides), aPick=(!aPh&&!scoreDecides);
-    const at=(can,side)=>can?` data-simwin="${id}" data-side="${side}"`:"";
+    // data-team = équipe de ce côté (vainqueur si on clique), data-opp = adversaire → mémorisés ensemble au clic.
+    const at=(can,team,opp)=>can?` data-simwin="${id}" data-team="${team}" data-opp="${opp}"`:"";
     return `<div class="bm ${k.r==='Finale'?'bm-final':''}">
       <div class="bm-hdr"><span>M${id}</span><span>${RD_SHORT[k.r]}</span></div>
-      <div class="bm-team ${hWin?'win':''} ${hPick?'pickable':''}"${at(hPick,"h")}>${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span><span class="bm-sc">${sc(r.hs)}</span></div>
-      <div class="bm-team ${aWin?'win':''} ${aPick?'pickable':''}"${at(aPick,"a")}>${bmFlag(r.a,aPh)}<span class="bm-name ${aPh?'ph':''}">${aDisp}</span><span class="bm-sc">${sc(r.as)}</span></div>
+      <div class="bm-team ${hWin?'win':''} ${hPick?'pickable':''}"${at(hPick,r.h,r.a)}>${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span><span class="bm-sc">${sc(r.hs)}</span></div>
+      <div class="bm-team ${aWin?'win':''} ${aPick?'pickable':''}"${at(aPick,r.a,r.h)}>${bmFlag(r.a,aPh)}<span class="bm-name ${aPh?'ph':''}">${aDisp}</span><span class="bm-sc">${sc(r.as)}</span></div>
     </div>`;
   };
   const col=(ids,cls)=>`<div class="b-col ${cls||''}">${ids.map(box).join("")}</div>`;
@@ -1563,8 +1697,12 @@ function bind(){
     const id=+el.dataset.ko; state.ko[id]=state.ko[id]||{}; state.ko[id].pen=el.value; saveState(); renderKO(); renderSim();});
   $("#koView").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return;
     $("#koView").querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
-    if(b.dataset.v==="bracket"){ $("#koBody").style.display="none"; $("#koTableau").style.display="block"; renderTableau(); }
-    else { $("#koTableau").style.display="none"; $("#koBody").style.display="block"; }});
+    if(b.dataset.v==="bracket"){ $("#koBody").style.display="none"; $("#koTableau").style.display="block"; $("#bracketModeBar").style.display=""; renderTableau(); }
+    else { $("#koTableau").style.display="none"; $("#bracketModeBar").style.display="none"; $("#koBody").style.display="block"; }});
+  // Bascule Projeté / Officiel du tableau (positions mathématiquement acquises uniquement).
+  $("#bracketMode").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return;
+    $("#bracketMode").querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
+    bracketMode=b.dataset.m; renderTableau();});
   $("#btnKoIcs").addEventListener("click",exportKoIcs);
   // Simulateur — BAC À SABLE : tout est écrit dans `pred` (local), jamais dans `state`. Aucun impact sur
   // les vrais scores / Classements / calendrier. Utilisable même en consultation (jamais publié au Gist).
@@ -1577,9 +1715,11 @@ function bind(){
   });
   $("#simBracket").addEventListener("click",e=>{
     const t=e.target.closest("[data-simwin]"); if(!t) return;
-    const id=+t.dataset.simwin, side=t.dataset.side;
+    const id=+t.dataset.simwin, team=t.dataset.team, opp=t.dataset.opp;
+    if(!team) return;
     pred.ko[id]=pred.ko[id]||{};
-    if(pred.ko[id].pick===side) delete pred.ko[id].pick; else pred.ko[id].pick=side; // re-clic = annule
+    if(pred.ko[id].pick===team){ delete pred.ko[id].pick; delete pred.ko[id].opp; } // re-clic sur le vainqueur = annule
+    else { pred.ko[id].pick=team; pred.ko[id].opp=opp; }                              // sinon : nouvelle équipe gagnante + son adversaire
     savePred();
     renderSimBracket();
   });
