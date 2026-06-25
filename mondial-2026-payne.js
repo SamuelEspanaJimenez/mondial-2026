@@ -267,6 +267,14 @@ function parseMins(str){
 }
 // Minute de référence d'un buteur (sa plus précoce) — sert au tri « le plus précoce d'abord ».
 function firstMin(s){const m=parseMins(s.m); return m.length?(parseInt(m[0],10)||0):9999;}
+// Un match est considéré « assurément terminé » 2h après son coup d'envoi (heure de Paris,
+// CEST = UTC+2 sur toute la durée du tournoi). Utilisé par le tableau OFFICIEL uniquement :
+// un résultat n'est validé mathématiquement qu'une fois ce délai écoulé (jamais avant la fin réelle).
+const SETTLE_MS = 2*60*60*1000;
+function matchSettled(m){
+  const k = m && m.d && m.t ? Date.parse(m.d+"T"+m.t+":00+02:00") : NaN;
+  return isFinite(k) ? Date.now() >= k+SETTLE_MS : true; // date/heure inconnue → on ne bloque pas
+}
 // Nombre de buts d'une entrée : autant que de minutes saisies (repli : ancien champ g, sinon 1).
 function goalCount(s){const m=parseMins(s.m); return m.length?m.length:(+s.g||1);}
 // Équipes (dom./ext.) d'un match, qu'il soit de poule ou à élimination directe.
@@ -607,6 +615,7 @@ function computeGroup(g, ctx){
   const gMatches=MATCHES.filter(m=>m.g===g);
   gMatches.forEach(m=>{
     const r=RES[m.id]; if(!r||r.h===""||r.a==="") return;
+    if(ctx&&ctx.official&&!matchSettled(m)) return; // officiel : match ignoré tant qu'il n'est pas terminé depuis 2h
     const h=+r.h,a=+r.a, rh=rows[m.h], ra=rows[m.a];
     rh.J++;ra.J++; rh.bp+=h;rh.bc+=a; ra.bp+=a;ra.bc+=h;
     if(h>a){rh.G++;rh.pts+=3;ra.P++;}
@@ -652,7 +661,9 @@ function clinchGroup(g, ctx){
   const RES=(ctx&&ctx.res)||state.res;
   const teams=GROUPS[g];
   const gMatches=MATCHES.filter(m=>m.g===g);
-  const played=id=>{const r=RES[id]; return r&&r.h!==""&&r.a!=="";};
+  const played=id=>{const r=RES[id]; if(!(r&&r.h!==""&&r.a!=="")) return false;
+    if(ctx&&ctx.official){ const m=gMatches.find(x=>x.id===id); if(m&&!matchSettled(m)) return false; } // pas terminé depuis 2h → traité comme « à jouer »
+    return true;};
   const rem=gMatches.filter(m=>!played(m.id));
   const anyRem={}; teams.forEach(t=>anyRem[t]=rem.some(m=>m.h===t||m.a===t));
 
@@ -943,7 +954,8 @@ function koResolved(ctx){
     const a = (st.a&&st.a.trim())?st.a.trim() : autoA;
     let win="",lose="";
     const hs=st.hs, as=st.as;
-    if(hs!==undefined&&hs!==""&&as!==undefined&&as!==""){
+    const settled = !(ctx&&ctx.official) || matchSettled(k); // officiel : on ne propage le vainqueur que 2h après le coup d'envoi
+    if(settled && hs!==undefined&&hs!==""&&as!==undefined&&as!==""){
       if(+hs>+as){win=h;lose=a;} else if(+as>+hs){win=a;lose=h;}
       else if(st.pen==="h"){win=h;lose=a;} else if(st.pen==="a"){win=a;lose=h;}
     }
