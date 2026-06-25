@@ -33,7 +33,11 @@
     background:linear-gradient(180deg, rgba(10,19,15,.97), rgba(10,19,15,.86));
     backdrop-filter:blur(10px);
     border-bottom:1px solid var(--line);
+    transition:transform .3s cubic-bezier(.4,0,.2,1);
+    will-change:transform;
   }
+  header.nav-hidden{transform:translateY(-100%)}
+  @media (prefers-reduced-motion:reduce){ header{transition:none} }
   .bar{max-width:var(--maxw); margin:0 auto; padding:14px 18px 0;}
   .brandrow{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap}
   .brand{display:flex; flex-direction:column; gap:2px}

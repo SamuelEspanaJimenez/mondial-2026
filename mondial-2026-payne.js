@@ -352,7 +352,8 @@ function renderCal(){
     const items=byDay[vd].sort((a,b)=>effMin(a.m.t)-effMin(b.m.t));
     const f=fmtDay(vd);
     const isToday=vd===today;
-    const sec=document.createElement("div"); sec.className="session";
+    const sec=document.createElement("div"); sec.className="session"+(isToday?" is-today":"");
+    sec.dataset.date=vd;
     sec.innerHTML=`<div class="sesshead">
       <span class="sessday">${f.dow}</span><span class="sessdate">${f.date}</span>
       ${isToday?'<span class="live"><span class="dot"></span>aujourd\'hui</span>':''}
@@ -1586,6 +1587,7 @@ function activateTab(p,dir){
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("on")); tab.classList.add("on");
   document.querySelectorAll(".panel").forEach(x=>x.classList.remove("on","swipe-next","swipe-prev"));
   panel.classList.add("on");
+  document.querySelector("header")&&document.querySelector("header").classList.remove("nav-hidden"); // onglet changé → header de nouveau visible
   // Animation de glissement directionnel quand on arrive par un swipe (dir = +1 suivant, -1 précédent)
   if(dir){ void panel.offsetWidth; panel.classList.add(dir>0?"swipe-next":"swipe-prev"); }
   // Garde l'onglet actif visible dans la barre défilante (mobile)
@@ -1617,6 +1619,42 @@ function stepTab(dir){
   const ni=idx+dir;
   if(ni<0||ni>=TAB_IDS.length) return; // bornes : pas de bouclage
   activateTab(TAB_IDS[ni],dir);
+}
+// Au chargement : positionne le calendrier sur le jour courant (ou, jour de repos, le prochain jour à matchs).
+function scrollToToday(){
+  const body=$("#calBody"); if(!body) return;
+  const today=todayParisView();
+  let sec=body.querySelector(".session.is-today");
+  if(!sec){ // pas de match aujourd'hui → premier jour à venir, sinon le dernier passé
+    const all=[...body.querySelectorAll(".session[data-date]")];
+    sec=all.find(s=>s.dataset.date>=today)||all[all.length-1];
+  }
+  if(!sec) return;
+  const header=document.querySelector("header");
+  const off=(header?header.offsetHeight:0)+10;
+  const y=sec.getBoundingClientRect().top+(window.scrollY||window.pageYOffset||0)-off;
+  const top=Math.max(0,Math.round(y));
+  window.scrollTo({top,behavior:"auto"});
+  navLastY=top; // évite que ce défilement programmé déclenche le masquage du header
+  if(header) header.classList.remove("nav-hidden");
+}
+// Header escamotable : disparaît en défilant vers le bas, réapparaît au défilement vers le haut ou en haut de page.
+let navLastY=0;
+function bindHeaderHide(){
+  const header=document.querySelector("header"); if(!header) return;
+  navLastY=window.scrollY||0;
+  let ticking=false;
+  const DELTA=6; // ignore les micro-mouvements (anti-tremblement)
+  function update(){
+    const y=window.scrollY||0;
+    if(y<=8){ header.classList.remove("nav-hidden"); }            // tout en haut → toujours visible
+    else if(Math.abs(y-navLastY)>=DELTA){
+      if(y>navLastY && y>header.offsetHeight) header.classList.add("nav-hidden");   // vers le bas → on cache
+      else if(y<navLastY) header.classList.remove("nav-hidden");                    // vers le haut → on montre
+    }
+    navLastY=y; ticking=false;
+  }
+  window.addEventListener("scroll",()=>{ if(!ticking){ ticking=true; requestAnimationFrame(update); } },{passive:true});
 }
 // Swipe horizontal entre onglets (mobile). Ignore les zones à défilement horizontal
 // (bracket, barre d'onglets) et les champs de saisie pour ne pas voler leurs gestes.
@@ -1656,6 +1694,7 @@ function bind(){
   // Hash modifié manuellement, lien interne suivi, ou navigation arrière/avant → on aligne l'onglet.
   window.addEventListener("hashchange",()=>{ const p=currentHashTab(); if(p) activateTab(p); });
   bindSwipe(); // glissement entre onglets sur smartphone
+  bindHeaderHide(); // header escamotable au défilement
   $("#filtState").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return;
     $("#filtState").querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
     filt.state=b.dataset.f; renderCal();});
@@ -1929,5 +1968,8 @@ function refreshCardState(id){
 
   MATCHES.forEach(m=>{ if(m.hs!=null && !state.res[m.id]) state.res[m.id]={h:m.hs,a:m.as}; });
   bind(); renderAll(); restoreTab();
+  // À l'ouverture, si on est sur le calendrier, on se positionne sur le jour courant.
+  const onCal=document.querySelector(".panel.on");
+  if(onCal&&onCal.id==="p-cal"){ requestAnimationFrame(()=>requestAnimationFrame(scrollToToday)); }
   if(memFallback) toast("Sauvegarde locale indisponible (localStorage bloqué) — pense à Exporter");
 })();
