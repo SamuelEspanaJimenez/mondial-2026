@@ -759,8 +759,8 @@ function renderStandings(){
 function openStandings(g){
   standFilt=g;
   const sg=$("#standGroup"); if(sg) sg.value=g;
-  activateTab("stand"); // déclenche renderStandings()
-  const card=$("#gcard-"+g); if(card) card.scrollIntoView({behavior:"smooth",block:"start"});
+  delete tabScroll["stand"]; // navigation fraîche → on arrive en haut de l'onglet (le groupe filtré y est déjà)
+  activateTab("stand"); // déclenche renderStandings() + positionnement en haut
 }
 
 /* ============ SCORERS LEADERBOARD ============ */
@@ -1630,16 +1630,16 @@ function currentHashTab(){ const h=decodeURIComponent((location.hash||"").slice(
 const tabScroll={};
 let restoringTab=false; // vrai pendant la restauration initiale → on n'enregistre pas le scroll de l'onglet par défaut (jamais réellement vu)
 function applyTabScroll(p){
-  if(p in tabScroll){                                  // déjà visité → on restaure sa position
-    const y=tabScroll[p];
+  // Cible : position mémorisée si déjà visité, sinon défaut (Calendrier → jour courant ; autres → haut).
+  const apply=()=>{
+    const y = (p in tabScroll) ? tabScroll[p] : (p==="cal" ? todayTargetY() : 0);
     window.scrollTo({top:y,behavior:"auto"});
     navLastY=y;
-  } else if(p==="cal"){                                // 1re visite du Calendrier → ligne du jour
-    scrollToToday();
-  } else {                                             // 1re visite d'un autre onglet → haut de page
-    window.scrollTo({top:0,behavior:"auto"});
-    navLastY=0;
-  }
+  };
+  apply();
+  // Ré-affirme après reflow : déjoue le « scroll-anchoring » du navigateur qui, en retirant le
+  // panneau précédent (souvent plus long), tente de conserver l'ancrage et nous décale (ex. vers les 3es).
+  requestAnimationFrame(apply);
   const header=document.querySelector("header"); if(header) header.classList.remove("nav-hidden");
 }
 // Active un onglet, mémorise le choix (localStorage) et synchronise l'URL.
@@ -1698,16 +1698,20 @@ function todaySection(){
     || [...body.querySelectorAll(".session[data-date]")].pop()
     || null;
 }
-// Positionne le calendrier sur le jour courant (au chargement : instantané ; via le bouton : défilement fluide).
-function scrollToToday(smooth){
-  const sec=todaySection(); if(!sec) return;
+// Position absolue (Y) de la ligne du jour, sous le header — stable quel que soit le scroll courant.
+function todayTargetY(){
+  const sec=todaySection(); if(!sec) return 0;
   const header=document.querySelector("header");
   const off=(header?header.offsetHeight:0)+10;
   const y=sec.getBoundingClientRect().top+(window.scrollY||window.pageYOffset||0)-off;
-  const top=Math.max(0,Math.round(y));
+  return Math.max(0,Math.round(y));
+}
+// Positionne le calendrier sur le jour courant (au chargement : instantané ; via le bouton : défilement fluide).
+function scrollToToday(smooth){
+  const top=todayTargetY();
   window.scrollTo({top,behavior:smooth?"smooth":"auto"});
   navLastY=top; // évite que ce défilement programmé déclenche le masquage du header
-  if(header) header.classList.remove("nav-hidden");
+  const header=document.querySelector("header"); if(header) header.classList.remove("nav-hidden");
 }
 // Bouton flottant contextuel : « Aujourd'hui » si la ligne du jour est hors écran (onglet Calendrier),
 // sinon « Haut » (retour en haut). Masqué tout en haut de page.
