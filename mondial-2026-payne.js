@@ -252,6 +252,9 @@ function migratePredPicks(){
 const $ = s=>document.querySelector(s);
 const flag = name=>{const c=(TEAMS[name]||["",""])[0];
   return c?`<img class="flag" src="https://flagcdn.com/h40/${c}.png" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`:"";};
+// Petit drapeau de l'adversaire affronté (leaderboard buteurs) — un par but marqué contre cette équipe.
+const oppFlag = name=>{const c=(TEAMS[name]||["",""])[0];
+  return c?`<img class="flag oppflag" src="https://flagcdn.com/h40/${c}.png" alt="${escHtml(name)}" title="${escHtml(name)}" loading="lazy" onerror="this.style.visibility='hidden'">`:"";};
 const short = name=>(TEAMS[name]||["",name])[1];
 function escHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function teamCell(name,cls,scoHtml){
@@ -747,22 +750,24 @@ function renderScorersLB(){
       if(s.csc) return; // contre son camp : non comptabilisé au classement
       const name=(s.n||"").trim(); if(!name) return;
       const team= s.t==='a'?t.a:t.h; if(!team) return;
+      const opp = s.t==='a'?t.h:t.a; // équipe adverse → un drapeau par but
       const key=name+"|"+team;
-      agg[key]=agg[key]||{n:name,t:team,g:0};
-      agg[key].g += goalCount(s);
+      agg[key]=agg[key]||{n:name,t:team,g:0,vs:[]};
+      const c=goalCount(s);
+      agg[key].g += c;
+      for(let j=0;j<c;j++) agg[key].vs.push(opp);
     });
   });
   const arr=Object.values(agg).sort((a,b)=>b.g-a.g||a.n.localeCompare(b.n));
   const sub=$("#scoSub"), body=$("#scoBody");
   if(!arr.length){ sub.textContent="— renseigne les buteurs depuis le calendrier"; body.innerHTML='<div class="empty">Aucun buteur saisi pour l\'instant.</div>'; return; }
-  const max=arr[0].g;
   sub.textContent=`— ${arr.length} buteur${arr.length>1?'s':''} · ${arr.reduce((s,x)=>s+x.g,0)} but${arr.reduce((s,x)=>s+x.g,0)>1?'s':''}`;
   let rk=1;
   body.innerHTML=`<table><tbody>${arr.map((x,i,a)=>{
     if(i>0 && a[i].g!==a[i-1].g) rk=i+1;
     return `<tr>
     <td class="rk">${rk}</td>
-    <td class="pl">${flag(x.t)} ${x.n}<div class="tg">${x.t}</div><div class="bar" style="width:${Math.round(x.g/max*100)}%"></div></td>
+    <td class="pl">${flag(x.t)} ${x.n}<div class="tg">${x.t}</div><div class="vs">${x.vs.map(oppFlag).join("")}</div></td>
     <td class="gl">${x.g}</td></tr>`;}).join("")}</tbody></table>`;
 }
 
@@ -1575,11 +1580,16 @@ function renderAll(){ renderCal(); renderStandings(); renderScorersLB(); renderK
 const TAB_IDS=["cal","stand","sco","ko","sim","notes"];
 function currentHashTab(){ const h=decodeURIComponent((location.hash||"").slice(1)); return TAB_IDS.includes(h)?h:null; }
 // Active un onglet, mémorise le choix (localStorage) et synchronise l'URL.
-function activateTab(p){
+function activateTab(p,dir){
   const tab=$('.tab[data-p="'+p+'"]'), panel=$("#p-"+p);
   if(!tab||!panel) return;
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("on")); tab.classList.add("on");
-  document.querySelectorAll(".panel").forEach(x=>x.classList.remove("on")); panel.classList.add("on");
+  document.querySelectorAll(".panel").forEach(x=>x.classList.remove("on","swipe-next","swipe-prev"));
+  panel.classList.add("on");
+  // Animation de glissement directionnel quand on arrive par un swipe (dir = +1 suivant, -1 précédent)
+  if(dir){ void panel.offsetWidth; panel.classList.add(dir>0?"swipe-next":"swipe-prev"); }
+  // Garde l'onglet actif visible dans la barre défilante (mobile)
+  try{ tab.scrollIntoView({behavior:"smooth",inline:"center",block:"nearest"}); }catch(e){}
   hideMoodPop();
   try{ localStorage.setItem(TAB_KEY,p); }catch(e){}
   // Garde l'URL alignée sur l'onglet (replaceState → pas de hashchange, pas de boucle, pas d'entrée d'historique parasite).
@@ -1598,11 +1608,54 @@ function restoreTab(){
   if(!p){ try{ p=localStorage.getItem(TAB_KEY); }catch(e){} }
   if(p && $('.tab[data-p="'+p+'"]')) activateTab(p);
 }
+// Onglet courant (depuis le bouton actif), puis bascule de `dir` crans (+1 suivant, -1 précédent).
+function stepTab(dir){
+  const on=document.querySelector(".tab.on");
+  const cur=on?on.dataset.p:currentHashTab();
+  const idx=TAB_IDS.indexOf(cur);
+  if(idx<0) return;
+  const ni=idx+dir;
+  if(ni<0||ni>=TAB_IDS.length) return; // bornes : pas de bouclage
+  activateTab(TAB_IDS[ni],dir);
+}
+// Swipe horizontal entre onglets (mobile). Ignore les zones à défilement horizontal
+// (bracket, barre d'onglets) et les champs de saisie pour ne pas voler leurs gestes.
+function bindSwipe(){
+  const main=document.querySelector("main"); if(!main) return;
+  let x0=0,y0=0,t0=0,track=false;
+  function horizScrollable(el){
+    while(el && el!==main){
+      if(el.nodeType===1 && el.scrollWidth-el.clientWidth>8){
+        const ox=getComputedStyle(el).overflowX;
+        if(ox==="auto"||ox==="scroll") return true;
+      }
+      el=el.parentElement;
+    }
+    return false;
+  }
+  main.addEventListener("touchstart",e=>{
+    if(e.touches.length!==1){ track=false; return; }
+    const t=e.target;
+    if(t.closest&&t.closest("input,select,textarea")){ track=false; return; }
+    if(horizScrollable(t)){ track=false; return; }
+    const tc=e.touches[0]; x0=tc.clientX; y0=tc.clientY; t0=Date.now(); track=true;
+  },{passive:true});
+  main.addEventListener("touchend",e=>{
+    if(!track) return; track=false;
+    const tc=e.changedTouches[0];
+    const dx=tc.clientX-x0, dy=tc.clientY-y0;
+    if(Date.now()-t0>700) return;           // trop lent → pas un swipe
+    if(Math.abs(dx)<55) return;             // amplitude insuffisante
+    if(Math.abs(dx)<Math.abs(dy)*1.7) return; // pas assez horizontal
+    stepTab(dx<0?1:-1);                      // glisse vers la gauche → onglet suivant
+  },{passive:true});
+}
 function bind(){
   $("#tabs").addEventListener("click",e=>{const b=e.target.closest(".tab"); if(!b) return;
     activateTab(b.dataset.p);});
   // Hash modifié manuellement, lien interne suivi, ou navigation arrière/avant → on aligne l'onglet.
   window.addEventListener("hashchange",()=>{ const p=currentHashTab(); if(p) activateTab(p); });
+  bindSwipe(); // glissement entre onglets sur smartphone
   $("#filtState").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return;
     $("#filtState").querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
     filt.state=b.dataset.f; renderCal();});

@@ -62,6 +62,11 @@
   .panel{display:none; animation:fade .25s ease}
   .panel.on{display:block}
   @keyframes fade{from{opacity:0; transform:translateY(4px)}to{opacity:1; transform:none}}
+  /* Glissement directionnel lors d'un swipe entre onglets (mobile) */
+  .panel.on.swipe-next{animation:slideFromRight .26s ease}
+  .panel.on.swipe-prev{animation:slideFromLeft .26s ease}
+  @keyframes slideFromRight{from{opacity:0; transform:translateX(34px)}to{opacity:1; transform:none}}
+  @keyframes slideFromLeft{from{opacity:0; transform:translateX(-34px)}to{opacity:1; transform:none}}
   .toolbar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:16px}
   .seg{display:inline-flex; background:var(--panel2); border:1px solid var(--line); border-radius:8px; overflow:hidden}
   .seg button{font:inherit; font-size:12px; color:var(--muted); background:none; border:0; padding:7px 12px; cursor:pointer}
@@ -186,7 +191,8 @@
   .lb .pl{font-weight:600}
   .lb .tg{font-size:11px; color:var(--muted)}
   .lb .gl{font-family:"Space Mono",monospace; font-weight:700; text-align:right; color:var(--grass)}
-  .lb .bar{height:5px; border-radius:99px; background:linear-gradient(90deg,var(--grass-d),var(--grass)); margin-top:5px}
+  .lb .vs{display:flex; flex-wrap:wrap; gap:3px; align-items:center; margin-top:6px}
+  .lb .oppflag{width:13px; height:auto; border-radius:2px; box-shadow:0 0 0 1px rgba(0,0,0,.4); background:#222}
   .empty{padding:40px 20px; text-align:center; color:var(--muted); font-size:13px}
   /* ---- knockout ---- */
   .kintro{font-size:12.5px;color:var(--muted);margin-bottom:14px;max-width:760px}
