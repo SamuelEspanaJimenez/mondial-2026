@@ -125,8 +125,14 @@
   .side.away .tinfo{align-items:flex-end}
   .tname{font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .tname .short{display:none}
-  .tsco{margin-top:2px; font-size:12px; font-weight:500; line-height:1.2; color:var(--muted); opacity:.78;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%}
+  /* bandeau buteurs sous la ligne du match : toujours empilés, dom. collé à gauche, ext. collé à droite */
+  .mscorers{display:flex; flex-direction:column; gap:5px; margin-top:9px; padding-top:8px; border-top:1px dashed var(--line);
+    font-size:12px; line-height:1.35; color:var(--muted)}
+  .ms-side{display:flex; gap:6px; max-width:60%; min-width:0}
+  .ms-home{align-self:flex-start; text-align:left}
+  .ms-away{align-self:flex-end; text-align:right; flex-direction:row-reverse}
+  .ms-ball{flex-shrink:0; opacity:.85; font-size:11px; line-height:1.5}
+  .ms-names{min-width:0; overflow-wrap:anywhere}
   .scorebox{display:flex; align-items:center; gap:5px}
   .scorebox input{width:38px; text-align:center; font-family:"Space Mono",monospace; font-size:16px; font-weight:700;
     padding:6px 0; background:var(--panel2); border:1px solid var(--line); border-radius:7px; color:var(--ink)}
@@ -384,6 +390,7 @@
     .flag{width:22px}
     .grow{grid-template-columns:1fr 78px 72px auto 24px; gap:5px}
     .legend{width:100%;margin-left:0}
+    .ms-side{max-width:85%} /* tuile déjà étroite sur téléphone : on laisse plus de place */
     /* ----- Simulateur sur téléphone ----- */
     /* Section 1 : 2 tuiles de groupe par ligne ; trigramme seul (les drapeaux ne tiennent pas) */
     #simFill{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}

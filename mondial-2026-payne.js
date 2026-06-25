@@ -277,17 +277,23 @@ function matchTeams(id){
     return {h:(st.h&&st.h.trim())||r.h||"", a:(st.a&&st.a.trim())||r.a||""};}
   return {h:"",a:""};
 }
-// Ligne « filigrane » des buteurs d'une équipe (côté h ou a) sous le nom.
-// Format : « C. Ronaldo 75' 87', N. Mendes 77' » — buteur le plus précoce en tête.
-function scorerLine(scs,side){
+// Buteurs d'un côté (h ou a) en texte : « C. Ronaldo 75' 87', N. Mendes 77' » — le plus précoce en tête.
+function sideScorersText(scs,side){
   const list=(scs||[]).filter(s=>s.t===side&&(s.n||"").trim());
   if(!list.length) return "";
-  const txt=[...list].sort((a,b)=>firstMin(a)-firstMin(b)).map(s=>{
+  return [...list].sort((a,b)=>firstMin(a)-firstMin(b)).map(s=>{
     const n=escHtml((s.n||"").trim())+(s.csc?" (csc)":"");
     const mins=parseMins(s.m).map(x=>escHtml(x)+"'").join(" ");
     return mins?`${n} ${mins}`:n;
   }).join(", ");
-  return `<span class="tsco">${txt}</span>`;
+}
+// Bandeau pleine largeur des buteurs sous la ligne du match : dom. à gauche, ext. à droite.
+// Passe à la ligne quand il y en a beaucoup ; les deux blocs s'empilent sur mobile (CSS).
+function scorersStrip(scs){
+  const h=sideScorersText(scs,"h"), a=sideScorersText(scs,"a");
+  if(!h&&!a) return "";
+  const block=(txt,cls)=>txt?`<div class="ms-side ${cls}"><span class="ms-ball">⚽</span><span class="ms-names">${txt}</span></div>`:"";
+  return `<div class="mscorers">${block(h,"ms-home")}${block(a,"ms-away")}</div>`;
 }
 function effMin(t){const[h,m]=t.split(":").map(Number); return h<10 ? (h+24)*60+m : h*60+m;}
 function viewDate(d,t){const h=+t.split(":")[0]; if(h>=10) return d;
@@ -439,11 +445,12 @@ function matchCard(m){
         <span class="hr mono">${m.t}</span>
         <span class="gp" style="background:${GCOLOR[m.g]}">GR. ${m.g}</span>
       </span>
-      ${teamCell(m.h,"home",scorerLine(scs,"h"))}
+      ${teamCell(m.h,"home")}
       ${scoreBox}
-      ${teamCell(m.a,"away",scorerLine(scs,"a"))}
+      ${teamCell(m.a,"away")}
       <button class="mexpand ${scs.length?'has':''}" data-exp="${m.id}" title="Buteurs">⚽</button>
     </div>
+    ${scorersStrip(scs)}
     <div class="mmeta">📍 ${m.v}<button class="seeStand" data-seestand="${m.g}" title="Voir le classement du groupe ${m.g}">voir classement</button></div>
     ${ratingRow(m.id)}
     <div class="scorers" id="sco-${m.id}"></div>`;
@@ -483,7 +490,7 @@ function koMatchCard(k,res){
         <span class="hr mono">${k.t}</span>
         <span class="gp ko" title="${ROUND_LABEL[k.r]}">${KO_TAG[k.r]||k.r}</span>
       </span>
-      ${koTeamCell(r.h,hName,hPh,"home",hPh?"":scorerLine(scs,"h"))}
+      ${koTeamCell(r.h,hName,hPh,"home")}
       ${READ_ONLY
         ? `<span class="scorebox ro"><span class="sval mono">${done?hv:"–"}</span><span class="vs">–</span><span class="sval mono">${done?av:"–"}</span></span>`
         : `<span class="scorebox">
@@ -491,9 +498,10 @@ function koMatchCard(k,res){
         <span class="vs">–</span>
         <input class="mono" type="number" min="0" inputmode="numeric" data-koid="${k.id}" data-s="as" value="${av}">
       </span>`}
-      ${koTeamCell(r.a,aName,aPh,"away",aPh?"":scorerLine(scs,"a"))}
+      ${koTeamCell(r.a,aName,aPh,"away")}
       <button class="mexpand ${scs.length?'has':''}" data-exp="${k.id}" title="Buteurs">⚽</button>
     </div>
+    ${scorersStrip(scs)}
     <div class="mmeta">📍 ${k.v}${pen}</div>
     ${ratingRow(k.id)}
     <div class="scorers" id="sco-${k.id}"></div>`;
@@ -518,16 +526,14 @@ function renderScorersEditor(id){
   box.innerHTML=`<h4>Buteurs</h4><div class="glist">${rows}</div>
     <button class="addg" data-add="${id}">+ Ajouter un buteur</button>`;
 }
-// Met à jour en direct les lignes buteurs sous les deux équipes d'une carte sans la reconstruire (préserve le focus de saisie).
+// Met à jour en direct le bandeau buteurs d'une carte sans la reconstruire (préserve le focus de saisie).
 function refreshScorerLine(id){
   const box=$("#sco-"+id); if(!box) return;
   const card=box.closest(".match"); if(!card) return;
-  [["home","h"],["away","a"]].forEach(([cls,side])=>{
-    const tinfo=card.querySelector(".side."+cls+" .tinfo"); if(!tinfo) return;
-    const old=tinfo.querySelector(".tsco"); if(old) old.remove();
-    const html=scorerLine(state.sco[id]||[],side);
-    if(html) tinfo.insertAdjacentHTML("beforeend",html);
-  });
+  const mrow=card.querySelector(".mrow"); if(!mrow) return;
+  const old=card.querySelector(".mscorers"); if(old) old.remove();
+  const html=scorersStrip(state.sco[id]||[]);
+  if(html) mrow.insertAdjacentHTML("afterend",html);
 }
 
 /* ============ TIEBREAKERS ============ */
