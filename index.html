@@ -324,6 +324,13 @@
   .bm-orig{font-family:"Space Mono",monospace;font-size:8.5px;font-weight:700;color:var(--amber);opacity:.8;margin-left:3px;flex-shrink:0}
   .bm-sc{font-family:"Space Mono",monospace;font-weight:700;font-size:11px;margin-left:auto;min-width:13px;text-align:right;flex-shrink:0}
   .bm-team.win .bm-name,.bm-team.win .bm-sc{color:var(--grass)}
+  /* PC : noms entiers des pays dans le tableau officiel (pas de troncature, colonnes élargies) */
+  @media (min-width:641px){
+    #koTableau .bm-name{max-width:none;white-space:normal;line-height:1.1}
+    #koTableau .bracket{min-width:1320px}
+    #koTableau .b-col{min-width:148px}
+    #koTableau .b-col.b-ctr{min-width:160px}
+  }
   /* ---- simulateur bracket ---- */
   #p-sim .kintro{margin-bottom:16px}
   .sim-section-hd{font-size:14px;font-weight:700;margin:0 0 11px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}

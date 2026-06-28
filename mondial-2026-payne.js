@@ -1048,16 +1048,18 @@ function renderTableau(){
   if(hint) hint.textContent = official
     ? "Seules les équipes mathématiquement certaines de leur place sont positionnées (les 3es n'apparaissent qu'une fois tous connus)."
     : "Tableau projeté d'après les classements actuels (comme si les scores étaient finaux).";
+  // Sur grand écran (PC) : noms entiers des pays et pas d'étiquettes de groupe (1C, 1D…).
+  const desktop = window.matchMedia("(min-width:641px)").matches;
   const box=id=>{
     const k=KO.find(x=>x.id===id); const r=res[id]||{};
     const hPh=!r.h, aPh=!r.a;
     const hName=r.h||slotHint(k.sh), aName=r.a||slotHint(k.sa);
-    const hDisp=hPh?hName:(TEAMS[r.h]?short(r.h):r.h);
-    const aDisp=aPh?aName:(TEAMS[r.a]?short(r.a):r.a);
+    const hDisp=hPh?hName:(desktop?r.h:(TEAMS[r.h]?short(r.h):r.h));
+    const aDisp=aPh?aName:(desktop?r.a:(TEAMS[r.a]?short(r.a):r.a));
     const hWin=r.win&&r.win===r.h, aWin=r.win&&r.win===r.a;
     const sc=v=>(v===undefined||v==="")?"":v;
-    const oH=(k.r==="16e"&&!hPh)?originLabel(k.sh,ctx):"";
-    const oA=(k.r==="16e"&&!aPh)?originLabel(k.sa,ctx):"";
+    const oH=(!desktop&&k.r==="16e"&&!hPh)?originLabel(k.sh,ctx):"";
+    const oA=(!desktop&&k.r==="16e"&&!aPh)?originLabel(k.sa,ctx):"";
     return `<div class="bm ${k.r==='Finale'?'bm-final':''}">
       <div class="bm-hdr"><span>M${id}</span><span>${RD_SHORT[k.r]}</span></div>
       <div class="bm-team ${hWin?'win':''}">${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span>${oH?`<span class="bm-orig">${oH}</span>`:''}<span class="bm-sc">${sc(r.hs)}</span></div>
@@ -1903,6 +1905,9 @@ function bind(){
     $("#bracketMode").querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
     bracketMode=b.dataset.m; renderTableau();});
   $("#btnKoIcs").addEventListener("click",exportKoIcs);
+  // Re-rendre le tableau au franchissement du seuil PC/mobile (noms entiers ↔ trigrammes).
+  window.matchMedia("(min-width:641px)").addEventListener("change",()=>{
+    const t=$("#koTableau"); if(t&&t.style.display!=="none") renderTableau();});
   // Simulateur — BAC À SABLE : tout est écrit dans `pred` (local), jamais dans `state`. Aucun impact sur
   // les vrais scores / Classements / calendrier. Utilisable même en consultation (jamais publié au Gist).
   $("#simFill").addEventListener("input",e=>{
