@@ -986,18 +986,14 @@ function renderKO(){
       const f=fmtDay(viewDate(k.d,k.t));
       const phH=slotHint(k.sh), phA=slotHint(k.sa);
       const hWin=r.win&&r.win===r.h, aWin=r.win&&r.win===r.a;
-      const origH=(k.r==="16e"&&r.h)?originLabel(k.sh):"";
-      const origA=(k.r==="16e"&&r.a)?originLabel(k.sa):"";
       const tie=document.createElement("div"); tie.className="ktie";
       tie.innerHTML=`
         <div class="kh"><span>Match ${k.id}</span><span class="mono">${f.dow.slice(0,3)}. ${f.date} · ${k.t}</span></div>
-        <div class="kteam ${hWin?'win':''}${origH?' has-orig':''}">
-          ${origH?`<span class="korig" title="Origine en 16e">${origH}</span>`:''}
+        <div class="kteam ${hWin?'win':''}">
           <input type="text" placeholder="${phH}" value="${(st.h&&st.h.trim())?st.h.replace(/"/g,'&quot;'):(r.h||'')}" data-ko="${k.id}" data-k="h">
           <input class="ksc mono" type="number" min="0" placeholder="" value="${st.hs??''}" data-ko="${k.id}" data-k="hs">
         </div>
-        <div class="kteam ${aWin?'win':''}${origA?' has-orig':''}">
-          ${origA?`<span class="korig" title="Origine en 16e">${origA}</span>`:''}
+        <div class="kteam ${aWin?'win':''}">
           <input type="text" placeholder="${phA}" value="${(st.a&&st.a.trim())?st.a.replace(/"/g,'&quot;'):(r.a||'')}" data-ko="${k.id}" data-k="a">
           <input class="ksc mono" type="number" min="0" placeholder="" value="${st.as??''}" data-ko="${k.id}" data-k="as">
         </div>
@@ -1015,7 +1011,7 @@ function renderKO(){
   });
   const hint=$("#thirdHint"); if(hint) hint.textContent=thirdHintText();
   renderTableau(); // garde la vue Tableau synchronisée en permanence avec la Liste
-  if(READ_ONLY){ $("#koBody").style.display="none"; $("#koTableau").style.display="block"; const bb=$("#bracketModeBar"); if(bb) bb.style.display=""; } // consultation : seule la vue Tableau est montrée
+  if(READ_ONLY){ $("#koBody").style.display="none"; $("#koTableau").style.display="block"; } // consultation : seule la vue Tableau est montrée
 }
 function slotHint(slot){
   if(/^[12][A-L]$/.test(slot)) return (slot[0]==="1"?"1er gr. ":"2e gr. ")+slot[1];
@@ -1038,17 +1034,12 @@ function bmFlag(name,isPh){
   const c=(TEAMS[name]||["",""])[0];
   return c?`<img class="flag" style="width:16px" src="https://flagcdn.com/h20/${c}.png" alt="" loading="lazy" onerror="this.style.display='none'">`:"";
 }
-let bracketMode="proj"; // "proj" = équipes projetées d'après les classements actuels ; "off" = positions acquises uniquement
 function renderTableau(){
   const wrap=$("#koTableau"); if(!wrap) return;
-  const official = bracketMode==="off";
-  const ctx = official ? {res:state.res, ko:state.ko, official:true} : undefined;
+  // Vue unique « officielle » : seules les positions acquises sont placées et un vainqueur ne se propage que 2h après le coup d'envoi.
+  const ctx = {res:state.res, ko:state.ko, official:true};
   const res=koResolved(ctx);
-  const hint=$("#bracketModeHint");
-  if(hint) hint.textContent = official
-    ? "Seules les équipes mathématiquement certaines de leur place sont positionnées (les 3es n'apparaissent qu'une fois tous connus)."
-    : "Tableau projeté d'après les classements actuels (comme si les scores étaient finaux).";
-  // Sur grand écran (PC) : noms entiers des pays et pas d'étiquettes de groupe (1C, 1D…).
+  // Sur grand écran (PC) : noms entiers des pays ; trigrammes sur mobile (cases étroites).
   const desktop = window.matchMedia("(min-width:641px)").matches;
   const box=id=>{
     const k=KO.find(x=>x.id===id); const r=res[id]||{};
@@ -1058,12 +1049,10 @@ function renderTableau(){
     const aDisp=aPh?aName:(desktop?r.a:(TEAMS[r.a]?short(r.a):r.a));
     const hWin=r.win&&r.win===r.h, aWin=r.win&&r.win===r.a;
     const sc=v=>(v===undefined||v==="")?"":v;
-    const oH=(!desktop&&k.r==="16e"&&!hPh)?originLabel(k.sh,ctx):"";
-    const oA=(!desktop&&k.r==="16e"&&!aPh)?originLabel(k.sa,ctx):"";
     return `<div class="bm ${k.r==='Finale'?'bm-final':''}">
       <div class="bm-hdr"><span>M${id}</span><span>${RD_SHORT[k.r]}</span></div>
-      <div class="bm-team ${hWin?'win':''}">${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span>${oH?`<span class="bm-orig">${oH}</span>`:''}<span class="bm-sc">${sc(r.hs)}</span></div>
-      <div class="bm-team ${aWin?'win':''}">${bmFlag(r.a,aPh)}<span class="bm-name ${aPh?'ph':''}">${aDisp}</span>${oA?`<span class="bm-orig">${oA}</span>`:''}<span class="bm-sc">${sc(r.as)}</span></div>
+      <div class="bm-team ${hWin?'win':''}">${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span><span class="bm-sc">${sc(r.hs)}</span></div>
+      <div class="bm-team ${aWin?'win':''}">${bmFlag(r.a,aPh)}<span class="bm-name ${aPh?'ph':''}">${aDisp}</span><span class="bm-sc">${sc(r.as)}</span></div>
     </div>`;
   };
   const col=(ids,cls)=>`<div class="b-col ${cls||''}">${ids.map(box).join("")}</div>`;
@@ -1625,7 +1614,7 @@ function renderAll(){ renderCal(); renderStandings(); renderScorersLB(); renderK
 
 /* ============ EVENTS ============ */
 // Routing par hash : l'onglet courant est reflété dans l'URL (#cal, #sim, …) → liens profonds partageables.
-const TAB_IDS=["cal","stand","sco","ko","sim","notes"];
+const TAB_IDS=["cal","ko","stand","sco","sim","notes"];
 function currentHashTab(){ const h=decodeURIComponent((location.hash||"").slice(1)); return TAB_IDS.includes(h)?h:null; }
 // Scroll mémorisé par onglet : on y revient lorsqu'on rouvre l'onglet ; 1re visite → comportement par défaut
 // (Calendrier → matchs du jour ; autres → haut de page).
@@ -1799,6 +1788,12 @@ function bindSwipe(){
 }
 function bind(){
   $("#tabs").addEventListener("click",e=>{const b=e.target.closest(".tab"); if(!b) return;
+    const on=document.querySelector(".tab.on");
+    if(on&&on.dataset.p===b.dataset.p){ // ré-appui sur l'onglet courant → retour en haut de la page
+      window.scrollTo({top:0,behavior:"smooth"});
+      const header=document.querySelector("header"); if(header) header.classList.remove("nav-hidden");
+      return;
+    }
     activateTab(b.dataset.p);});
   // Hash modifié manuellement, lien interne suivi, ou navigation arrière/avant → on aligne l'onglet.
   window.addEventListener("hashchange",()=>{ const p=currentHashTab(); if(p) activateTab(p); });
@@ -1898,12 +1893,8 @@ function bind(){
     const id=+el.dataset.ko; state.ko[id]=state.ko[id]||{}; state.ko[id].pen=el.value; saveState(); renderKO(); renderSim();});
   $("#koView").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return;
     $("#koView").querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
-    if(b.dataset.v==="bracket"){ $("#koBody").style.display="none"; $("#koTableau").style.display="block"; $("#bracketModeBar").style.display=""; renderTableau(); }
-    else { $("#koTableau").style.display="none"; $("#bracketModeBar").style.display="none"; $("#koBody").style.display="block"; }});
-  // Bascule Projeté / Officiel du tableau (positions mathématiquement acquises uniquement).
-  $("#bracketMode").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return;
-    $("#bracketMode").querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
-    bracketMode=b.dataset.m; renderTableau();});
+    if(b.dataset.v==="bracket"){ $("#koBody").style.display="none"; $("#koTableau").style.display="block"; renderTableau(); }
+    else { $("#koTableau").style.display="none"; $("#koBody").style.display="block"; }});
   $("#btnKoIcs").addEventListener("click",exportKoIcs);
   // Re-rendre le tableau au franchissement du seuil PC/mobile (noms entiers ↔ trigrammes).
   window.matchMedia("(min-width:641px)").addEventListener("change",()=>{

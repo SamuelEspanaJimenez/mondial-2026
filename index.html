@@ -324,12 +324,15 @@
   .bm-orig{font-family:"Space Mono",monospace;font-size:8.5px;font-weight:700;color:var(--amber);opacity:.8;margin-left:3px;flex-shrink:0}
   .bm-sc{font-family:"Space Mono",monospace;font-weight:700;font-size:11px;margin-left:auto;min-width:13px;text-align:right;flex-shrink:0}
   .bm-team.win .bm-name,.bm-team.win .bm-sc{color:var(--grass)}
-  /* PC : noms entiers des pays dans le tableau officiel (pas de troncature, colonnes élargies) */
+  /* PC : noms entiers des pays + tableau étalé sur toute la largeur de l'écran (déborde du conteneur centré
+     pour gagner de la place sur les bords plutôt que rapetisser les cases) → tout tient sans défilement. */
   @media (min-width:641px){
+    #koTableau{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);box-sizing:border-box}
+    #koTableau .bracket-wrap{padding-left:24px;padding-right:24px}
     #koTableau .bm-name{max-width:none;white-space:normal;line-height:1.1}
-    #koTableau .bracket{min-width:1320px}
-    #koTableau .b-col{min-width:148px}
-    #koTableau .b-col.b-ctr{min-width:160px}
+    #koTableau .bracket{min-width:1100px;width:100%}
+    #koTableau .b-col{min-width:0}
+    #koTableau .b-col.b-ctr{min-width:0}
   }
   /* ---- simulateur bracket ---- */
   #p-sim .kintro{margin-bottom:16px}
@@ -455,9 +458,9 @@
   </div>
   <nav class="tabs" id="tabs">
     <button class="tab on" data-p="cal">Calendrier</button>
+    <button class="tab" data-p="ko">Phase éliminatoire</button>
     <button class="tab" data-p="stand">Classements</button>
     <button class="tab" data-p="sco">Buteurs</button>
-    <button class="tab" data-p="ko">Phase éliminatoire</button>
     <button class="tab" data-p="sim">Simulateur Bracket</button>
     <button class="tab" data-p="notes">Notes</button>
   </nav>
@@ -566,13 +569,6 @@
       <div id="gistStatus" class="hint"></div>
     </div>
     <div id="koBody"></div>
-    <div id="bracketModeBar" class="ko-toggle" style="display:none">
-      <div class="seg" id="bracketMode">
-        <button class="on" data-m="proj">Projeté</button>
-        <button data-m="off">Officiel</button>
-      </div>
-      <span class="hint" id="bracketModeHint"></span>
-    </div>
     <div id="koTableau" style="display:none"></div>
   </section>
 
