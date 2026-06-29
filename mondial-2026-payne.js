@@ -1067,7 +1067,9 @@ function renderTableau(){
   wrap.innerHTML=bracketHTML();
   if($("#koFs")&&$("#koFs").style.display!=="none") $("#koFsBody").innerHTML=bracketHTML(); // garde le plein écran à jour
 }
-// ---- Bulle détail d'une brique (équipes complètes + buteurs, sans notes), façon Calendrier ----
+// Ville d'un lieu « Stade, Ville » → ne garde que la ville (après la dernière virgule).
+function cityOf(v){ const s=String(v||""); const i=s.lastIndexOf(","); return (i>=0?s.slice(i+1):s).trim(); }
+// ---- Bulle détail d'une brique (équipes complètes + buteurs + ville, sans notes), façon Calendrier ----
 function koPopContent(id){
   const k=KO.find(x=>x.id===id); if(!k) return "";
   const r=koResolved({res:state.res, ko:state.ko, official:true})[id]||{};
@@ -1077,13 +1079,13 @@ function koPopContent(id){
   const hWin=r.win&&r.win===r.h, aWin=r.win&&r.win===r.a;
   const sc=v=>(v===undefined||v==="")?"":v;
   const scs=state.sco[id]||[];
-  const hSco=sideScorersText(scs,"h"), aSco=sideScorersText(scs,"a");
-  const row=(name,ph,win,score,sco)=>`
-    <div class="kp-team ${win?'win':''}">${ph?'':bmFlag(name,false)}<span class="kp-name ${ph?'ph':''}">${escHtml(name)}</span><span class="kp-sc">${sc(score)}</span></div>
-    ${sco?`<div class="kp-sco">⚽ ${sco}</div>`:''}`;
+  const row=(name,ph,win,score)=>`
+    <div class="kp-team ${win?'win':''}">${ph?'':bmFlag(name,false)}<span class="kp-name ${ph?'ph':''}">${escHtml(name)}</span><span class="kp-sc">${sc(score)}</span></div>`;
   return `<div class="ko-pop-hd">M${id} · ${ROUND_LABEL[k.r]} · ${f.dow} ${f.date} · ${k.t}</div>
-    ${row(hName,hPh,hWin,r.hs,hSco)}
-    ${row(aName,aPh,aWin,r.as,aSco)}`;
+    ${row(hName,hPh,hWin,r.hs)}
+    ${row(aName,aPh,aWin,r.as)}
+    ${scorersStrip(scs)}
+    <div class="kp-meta">📍 ${escHtml(cityOf(k.v))}</div>`;
 }
 let currentKoPopEl=null;
 function showKoPop(id,el){
