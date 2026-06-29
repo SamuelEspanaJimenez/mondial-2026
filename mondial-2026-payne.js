@@ -1053,19 +1053,29 @@ function bracketHTML(){
   const res=koResolved(ctx);
   // Sur grand écran (PC) : noms entiers des pays ; trigrammes sur mobile (cases étroites).
   const desktop = window.matchMedia("(min-width:641px)").matches;
+  const leftIds = new Set([].concat(BRACKET.left.r32,BRACKET.left.r16,BRACKET.left.qf,BRACKET.left.sf));
   const box=id=>{
     const k=KO.find(x=>x.id===id); const r=res[id]||{};
+    const st=state.ko[id]||{};
     const hPh=!r.h, aPh=!r.a;
     const hName=r.h||slotHint(k.sh), aName=r.a||slotHint(k.sa);
     const hDisp=hPh?hName:(desktop?r.h:(TEAMS[r.h]?short(r.h):r.h));
     const aDisp=aPh?aName:(desktop?r.a:(TEAMS[r.a]?short(r.a):r.a));
     const hWin=r.win&&r.win===r.h, aWin=r.win&&r.win===r.a;
     const sc=v=>(v===undefined||v==="")?"":v;
-    const note=koOutcomeText(id);
+    // Tirs au but : les deux scores en jaune, collés au score de leur équipe ; côté gauche du tableau → à gauche du score, côté droit → à droite.
+    const pHas=st.phs!==undefined&&st.phs!==""&&st.pas!==undefined&&st.pas!=="";
+    const left=leftIds.has(id);
+    const scBox=(main,penVal)=>{
+      const scEl=`<span class="bm-sc">${sc(main)}</span>`;
+      const pEl=pHas?`<span class="bm-pen">${penVal}</span>`:"";
+      return `<span class="bm-scbox">${left?pEl+scEl:scEl+pEl}</span>`;
+    };
+    const note=st.aet?"a.p.":""; // les t.a.b. sont désormais affichés à côté des scores
     return `<div class="bm ${k.r==='Finale'?'bm-final':''}" data-mid="${id}">
       <div class="bm-hdr"><span>M${id}</span><span>${RD_SHORT[k.r]}</span></div>
-      <div class="bm-team ${hWin?'win':''}">${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span><span class="bm-sc">${sc(r.hs)}</span></div>
-      <div class="bm-team ${aWin?'win':''}">${bmFlag(r.a,aPh)}<span class="bm-name ${aPh?'ph':''}">${aDisp}</span><span class="bm-sc">${sc(r.as)}</span></div>
+      <div class="bm-team ${hWin?'win':''}">${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span>${scBox(r.hs,st.phs)}</div>
+      <div class="bm-team ${aWin?'win':''}">${bmFlag(r.a,aPh)}<span class="bm-name ${aPh?'ph':''}">${aDisp}</span>${scBox(r.as,st.pas)}</div>
       ${note?`<div class="bm-note">${note}</div>`:''}
     </div>`;
   };
