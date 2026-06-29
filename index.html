@@ -146,8 +146,14 @@
   .mtime .gp{font-size:10px; font-weight:700; color:#0a130f; padding:1px 6px; border-radius:5px; letter-spacing:.02em}
   .mtime .gp.ko{background:var(--raise); color:var(--amber); border:1px solid rgba(243,193,75,.45)}
   .match.ko .side.ph .tname{color:var(--faint); font-weight:500; font-style:italic; font-size:12px; white-space:normal; line-height:1.15}
-  .match.ko .kopen{margin-left:auto; display:inline-flex; align-items:center; gap:5px; color:var(--muted)}
-  .match.ko .kopen select{font:inherit; font-size:11px; color:var(--ink); background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:3px 6px}
+  .match.ko .kopen{margin-left:auto; display:inline-flex; align-items:center; gap:5px; color:var(--amber)}
+  /* Prolongations + tirs au but (calendrier & liste phase élim) */
+  .koaet{display:inline-flex; align-items:center; gap:4px; color:var(--muted); cursor:pointer}
+  .match.ko .koaet{margin-left:auto}
+  .kotab{display:inline-flex; align-items:center; gap:4px; color:var(--muted)}
+  .kpsc{width:34px; text-align:center; font-family:"Space Mono",monospace; font-weight:700; font-size:12.5px;
+    color:var(--ink); background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:3px 0}
+  .kpsc:focus{outline:0; border-color:var(--grass)}
   .side{display:flex; align-items:center; gap:9px; min-width:0}
   .side.away{flex-direction:row-reverse; text-align:right}
   .flag{width:26px; height:auto; border-radius:3px; box-shadow:0 0 0 1px rgba(0,0,0,.4); flex-shrink:0; background:#222}
@@ -249,8 +255,8 @@
   .kteam input[type=text]{width:100%}
   .kteam input.ksc{text-align:center;font-family:"Space Mono",monospace;font-weight:700}
   .kteam.win input[type=text]{border-color:var(--grass-d);color:var(--grass)}
-  .kpen{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);margin-top:6px}
-  .kpen select{padding:4px 7px;font-size:11px}
+  .kpen{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:6px}
+  .kpen .kpsc{width:38px}
   footer{max-width:var(--maxw);margin:10px auto 40px;padding:18px;font-size:11.5px;color:var(--faint);border-top:1px solid var(--line);line-height:1.7}
   footer b{color:var(--muted)}
   .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;
@@ -353,6 +359,7 @@
   .bm-orig{font-family:"Space Mono",monospace;font-size:8.5px;font-weight:700;color:var(--amber);opacity:.8;margin-left:3px;flex-shrink:0}
   .bm-sc{font-family:"Space Mono",monospace;font-weight:700;font-size:11px;margin-left:auto;min-width:13px;text-align:right;flex-shrink:0}
   .bm-team.win .bm-name,.bm-team.win .bm-sc{color:var(--grass)}
+  .bm-note{font-family:"Space Mono",monospace;font-size:8px;font-weight:700;color:var(--amber);text-align:center;letter-spacing:.02em;line-height:1.1;margin-top:2px;opacity:.9}
   #koTableau .bm{cursor:pointer}
   /* Bulle détail d'une brique de match (survol / appui) — équipes complètes + buteurs, sans notes */
   .ko-pop{position:fixed; z-index:90; background:var(--panel2); border:1px solid var(--chalk);
@@ -389,6 +396,7 @@
     #koTableau .bracket{min-width:1100px;width:100%}
     #koTableau .b-col{min-width:0}
     #koTableau .b-col.b-ctr{min-width:0}
+    #koTableau .bm-note,.kofs-body .bm-note{font-size:10px}
   }
   /* ---- simulateur bracket ---- */
   #p-sim .kintro{margin-bottom:16px}

@@ -278,6 +278,14 @@ function matchSettled(m){
 }
 // Nombre de buts d'une entrée : autant que de minutes saisies (repli : ancien champ g, sinon 1).
 function goalCount(s){const m=parseMins(s.m); return m.length?m.length:(+s.g||1);}
+// Mention de fin de match à élimination directe : « a.p. » (prolongations) et/ou « t.a.b. X–Y » (tirs au but).
+function koOutcomeText(id){
+  const st=state.ko[id]||{}; const parts=[];
+  if(st.aet) parts.push("a.p.");
+  const ph=st.phs, pa=st.pas;
+  if(ph!==undefined&&ph!==""&&pa!==undefined&&pa!=="") parts.push(`t.a.b. ${ph}–${pa}`);
+  return parts.join(" · ");
+}
 // Équipes (dom./ext.) d'un match, qu'il soit de poule ou à élimination directe.
 function matchTeams(id){
   const m=MATCHES.find(x=>x.id===id); if(m) return {h:m.h,a:m.a};
@@ -486,13 +494,14 @@ function koMatchCard(k,res){
   const hWin=r.win&&r.win===r.h, aWin=r.win&&r.win===r.a;
   let wcls=""; if(hWin) wcls="winL"; else if(aWin) wcls="winA";
   let pen="";
-  if(done && +hv===+av){
-    pen=`<span class="kopen">tirs au but :
-      <select data-kopen="${k.id}">
-        <option value="" ${!st.pen?'selected':''}>—</option>
-        <option value="h" ${st.pen==='h'?'selected':''}>${r.h?short(r.h):'dom.'}</option>
-        <option value="a" ${st.pen==='a'?'selected':''}>${r.a?short(r.a):'ext.'}</option>
-      </select></span>`;
+  if(done){
+    if(READ_ONLY){
+      const out=koOutcomeText(k.id);
+      pen = out?`<span class="kopen">${out}</span>`:"";
+    }else{
+      pen=`<label class="koaet"><input type="checkbox" data-koaet="${k.id}" ${st.aet?'checked':''}> a.p.</label>`;
+      if(+hv===+av) pen+=`<span class="kotab">t.a.b. <input class="mono kpsc" type="number" min="0" inputmode="numeric" data-koid="${k.id}" data-s="phs" value="${st.phs??''}"><span class="vs">–</span><input class="mono kpsc" type="number" min="0" inputmode="numeric" data-koid="${k.id}" data-s="pas" value="${st.pas??''}"></span>`;
+    }
   }
   const scs=state.sco[k.id]||[];
   const el=document.createElement("div");
@@ -958,7 +967,11 @@ function koResolved(ctx){
     const settled = !(ctx&&ctx.official) || matchSettled(k); // officiel : on ne propage le vainqueur que 2h après le coup d'envoi
     if(settled && hs!==undefined&&hs!==""&&as!==undefined&&as!==""){
       if(+hs>+as){win=h;lose=a;} else if(+as>+hs){win=a;lose=h;}
-      else if(st.pen==="h"){win=h;lose=a;} else if(st.pen==="a"){win=a;lose=h;}
+      else{ // égalité après 90' (ou prolongations) → départage aux tirs au but
+        const ph=st.phs, pa=st.pas, pHas=ph!==undefined&&ph!==""&&pa!==undefined&&pa!=="";
+        if(pHas && +ph!==+pa){ if(+ph>+pa){win=h;lose=a;} else {win=a;lose=h;} }
+        else if(st.pen==="h"){win=h;lose=a;} else if(st.pen==="a"){win=a;lose=h;} // repli : ancien champ « pen » (vainqueur seul)
+      }
     }
     // Choix manuel du simulateur : départage un match non tranché par le score (clic sur une équipe).
     // Le choix est mémorisé par ÉQUIPE (st.pick = vainqueur) + son ADVERSAIRE au moment du clic (st.opp).
@@ -987,6 +1000,8 @@ function renderKO(){
       const f=fmtDay(viewDate(k.d,k.t));
       const phH=slotHint(k.sh), phA=slotHint(k.sa);
       const hWin=r.win&&r.win===r.h, aWin=r.win&&r.win===r.a;
+      const done = st.hs!==undefined&&st.hs!==""&&st.as!==undefined&&st.as!=="";
+      const draw = done && +st.hs===+st.as;
       const tie=document.createElement("div"); tie.className="ktie";
       tie.innerHTML=`
         <div class="kh"><span>Match ${k.id}</span><span class="mono">${f.dow.slice(0,3)}. ${f.date} · ${k.t}</span></div>
@@ -998,13 +1013,10 @@ function renderKO(){
           <input type="text" placeholder="${phA}" value="${(st.a&&st.a.trim())?st.a.replace(/"/g,'&quot;'):(r.a||'')}" data-ko="${k.id}" data-k="a">
           <input class="ksc mono" type="number" min="0" placeholder="" value="${st.as??''}" data-ko="${k.id}" data-k="as">
         </div>
-        <div class="kpen">tirs au but :
-          <select data-ko="${k.id}" data-k="pen">
-            <option value="" ${!st.pen?'selected':''}>—</option>
-            <option value="h" ${st.pen==='h'?'selected':''}>${r.h||'dom.'}</option>
-            <option value="a" ${st.pen==='a'?'selected':''}>${r.a||'ext.'}</option>
-          </select>
-        </div>
+        ${done?`<div class="kpen">
+          <label class="koaet"><input type="checkbox" data-ko="${k.id}" data-k="aet" ${st.aet?'checked':''}> Prolongations (a.p.)</label>
+          ${draw?`<span class="kotab">t.a.b. <input class="ksc mono" type="number" min="0" data-ko="${k.id}" data-k="phs" value="${st.phs??''}"><span class="vs">–</span><input class="ksc mono" type="number" min="0" data-ko="${k.id}" data-k="pas" value="${st.pas??''}"></span>`:''}
+        </div>`:''}
         <div class="mmeta" style="margin-top:8px">📍 ${k.v}</div>`;
       grid.appendChild(tie);
     });
@@ -1049,10 +1061,12 @@ function bracketHTML(){
     const aDisp=aPh?aName:(desktop?r.a:(TEAMS[r.a]?short(r.a):r.a));
     const hWin=r.win&&r.win===r.h, aWin=r.win&&r.win===r.a;
     const sc=v=>(v===undefined||v==="")?"":v;
+    const note=koOutcomeText(id);
     return `<div class="bm ${k.r==='Finale'?'bm-final':''}" data-mid="${id}">
       <div class="bm-hdr"><span>M${id}</span><span>${RD_SHORT[k.r]}</span></div>
       <div class="bm-team ${hWin?'win':''}">${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span><span class="bm-sc">${sc(r.hs)}</span></div>
       <div class="bm-team ${aWin?'win':''}">${bmFlag(r.a,aPh)}<span class="bm-name ${aPh?'ph':''}">${aDisp}</span><span class="bm-sc">${sc(r.as)}</span></div>
+      ${note?`<div class="bm-note">${note}</div>`:''}
     </div>`;
   };
   const col=(ids,cls)=>`<div class="b-col ${cls||''}">${ids.map(box).join("")}</div>`;
@@ -1085,7 +1099,7 @@ function koPopContent(id){
     ${row(hName,hPh,hWin,r.hs)}
     ${row(aName,aPh,aWin,r.as)}
     ${scorersStrip(scs)}
-    <div class="kp-meta">📍 ${escHtml(cityOf(k.v))}</div>`;
+    <div class="kp-meta">📍 ${escHtml(cityOf(k.v))}${koOutcomeText(id)?` · ${koOutcomeText(id)}`:''}</div>`;
 }
 let currentKoPopEl=null;
 function showKoPop(id,el){
@@ -1936,9 +1950,9 @@ function bind(){
     if(g){const id=+g.dataset.sc,i=+g.dataset.i;
       state.sco[id]=state.sco[id]||[]; if(!state.sco[id][i]) state.sco[id][i]={n:"",t:"h",m:""};
       state.sco[id][i].t=g.value; saveState(); renderScorersLB(); refreshScorerLine(id); return;}
-    const kp=e.target.closest("select[data-kopen]");
-    if(kp){const id=+kp.dataset.kopen;
-      state.ko[id]=state.ko[id]||{}; state.ko[id].pen=kp.value;
+    const ae=e.target.closest("input[data-koaet]"); // case « Prolongations » (a.p.)
+    if(ae){const id=+ae.dataset.koaet;
+      state.ko[id]=state.ko[id]||{}; state.ko[id].aet=ae.checked;
       saveState(); renderKO(); renderCal(); return;}
     // Au blur d'un score (KO ou poule), on rejoue le calendrier pour propager les vainqueurs/équipes des tours suivants
     // + on rafraîchit le simulateur : un VRAI score saisi ici fait sortir le match des propositions de pronostic.
@@ -1974,10 +1988,9 @@ function bind(){
       return;}
   });
   $("#koBody").addEventListener("input",e=>{if(READ_ONLY) return; const el=e.target.closest("[data-ko]"); if(!el) return;
-    const id=+el.dataset.ko,k=el.dataset.k; state.ko[id]=state.ko[id]||{}; state.ko[id][k]=el.value;
+    const id=+el.dataset.ko,k=el.dataset.k; state.ko[id]=state.ko[id]||{};
+    state.ko[id][k]= el.type==="checkbox" ? el.checked : el.value;
     saveState(); renderKO(); renderSim();}); // un vrai résultat KO sert aussi de base au pronostic
-  $("#koBody").addEventListener("change",e=>{if(READ_ONLY) return; const el=e.target.closest("select[data-ko]"); if(!el) return;
-    const id=+el.dataset.ko; state.ko[id]=state.ko[id]||{}; state.ko[id].pen=el.value; saveState(); renderKO(); renderSim();});
   $("#koView").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return;
     $("#koView").querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
     if(b.dataset.v==="bracket"){ $("#koBody").style.display="none"; $("#koTableau").style.display="block"; renderTableau(); }
