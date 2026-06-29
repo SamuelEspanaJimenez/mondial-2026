@@ -145,6 +145,7 @@ const ROUND_LABEL = {"16e":"Seizièmes de finale","8e":"Huitièmes de finale","4
 const SKEY = "cdm2026_payne_v1";
 const SYNC_KEY = "cdm2026_synced_at_v1"; // horodatage de la dernière synchro Gist connue localement
 const TAB_KEY = "cdm2026_active_tab_v1"; // onglet courant, conservé entre les rechargements de page
+const THEME_KEY = "cdm2026_theme_v1"; // thème choisi (jour / nuit / noir), conservé entre les rechargements
 const NKEY = "cdm2026_notes_v1"; // notes (mood calendar) — PROPRES à chaque navigateur, jamais synchronisées via le Gist
 // Optionnel — pour raccourcir le lien de consultation : colle ici l'URL « URL de données » affichée
 // dans le panneau ☁ Sync cloud après ta 1re publication. Une fois remplie, le lien à partager devient
@@ -1034,9 +1035,8 @@ function bmFlag(name,isPh){
   const c=(TEAMS[name]||["",""])[0];
   return c?`<img class="flag" style="width:16px" src="https://flagcdn.com/h20/${c}.png" alt="" loading="lazy" onerror="this.style.display='none'">`:"";
 }
-function renderTableau(){
-  const wrap=$("#koTableau"); if(!wrap) return;
-  // Vue unique « officielle » : seules les positions acquises sont placées et un vainqueur ne se propage que 2h après le coup d'envoi.
+// Construit le HTML du tableau (vue unique « officielle ») — partagé par la vue normale et le plein écran.
+function bracketHTML(){
   const ctx = {res:state.res, ko:state.ko, official:true};
   const res=koResolved(ctx);
   // Sur grand écran (PC) : noms entiers des pays ; trigrammes sur mobile (cases étroites).
@@ -1049,18 +1049,73 @@ function renderTableau(){
     const aDisp=aPh?aName:(desktop?r.a:(TEAMS[r.a]?short(r.a):r.a));
     const hWin=r.win&&r.win===r.h, aWin=r.win&&r.win===r.a;
     const sc=v=>(v===undefined||v==="")?"":v;
-    return `<div class="bm ${k.r==='Finale'?'bm-final':''}">
+    return `<div class="bm ${k.r==='Finale'?'bm-final':''}" data-mid="${id}">
       <div class="bm-hdr"><span>M${id}</span><span>${RD_SHORT[k.r]}</span></div>
       <div class="bm-team ${hWin?'win':''}">${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span><span class="bm-sc">${sc(r.hs)}</span></div>
       <div class="bm-team ${aWin?'win':''}">${bmFlag(r.a,aPh)}<span class="bm-name ${aPh?'ph':''}">${aDisp}</span><span class="bm-sc">${sc(r.as)}</span></div>
     </div>`;
   };
   const col=(ids,cls)=>`<div class="b-col ${cls||''}">${ids.map(box).join("")}</div>`;
-  wrap.innerHTML=`<div class="bracket-wrap"><div class="bracket">
+  return `<div class="bracket-wrap"><div class="bracket">
     ${col(BRACKET.left.r32)}${col(BRACKET.left.r16)}${col(BRACKET.left.qf)}${col(BRACKET.left.sf)}
     ${col(BRACKET.center,'b-ctr')}
     ${col(BRACKET.right.sf)}${col(BRACKET.right.qf)}${col(BRACKET.right.r16)}${col(BRACKET.right.r32)}
   </div></div>`;
+}
+function renderTableau(){
+  const wrap=$("#koTableau"); if(!wrap) return;
+  wrap.innerHTML=bracketHTML();
+  if($("#koFs")&&$("#koFs").style.display!=="none") $("#koFsBody").innerHTML=bracketHTML(); // garde le plein écran à jour
+}
+// ---- Bulle détail d'une brique (équipes complètes + buteurs, sans notes), façon Calendrier ----
+function koPopContent(id){
+  const k=KO.find(x=>x.id===id); if(!k) return "";
+  const r=koResolved({res:state.res, ko:state.ko, official:true})[id]||{};
+  const f=fmtDay(viewDate(k.d,k.t));
+  const hPh=!r.h, aPh=!r.a;
+  const hName=r.h||slotHint(k.sh), aName=r.a||slotHint(k.sa);
+  const hWin=r.win&&r.win===r.h, aWin=r.win&&r.win===r.a;
+  const sc=v=>(v===undefined||v==="")?"":v;
+  const scs=state.sco[id]||[];
+  const hSco=sideScorersText(scs,"h"), aSco=sideScorersText(scs,"a");
+  const row=(name,ph,win,score,sco)=>`
+    <div class="kp-team ${win?'win':''}">${ph?'':bmFlag(name,false)}<span class="kp-name ${ph?'ph':''}">${escHtml(name)}</span><span class="kp-sc">${sc(score)}</span></div>
+    ${sco?`<div class="kp-sco">⚽ ${sco}</div>`:''}`;
+  return `<div class="ko-pop-hd">M${id} · ${ROUND_LABEL[k.r]} · ${f.dow} ${f.date} · ${k.t}</div>
+    ${row(hName,hPh,hWin,r.hs,hSco)}
+    ${row(aName,aPh,aWin,r.as,aSco)}`;
+}
+let currentKoPopEl=null;
+function showKoPop(id,el){
+  const pop=$("#koPop"); if(!pop) return;
+  pop.innerHTML=koPopContent(id);
+  const host=document.fullscreenElement||document.body; // en plein écran natif : la bulle doit être dans l'élément plein écran
+  if(pop.parentElement!==host) host.appendChild(pop);
+  pop.classList.add("show");
+  pop.style.left="0px"; pop.style.top="0px";
+  const rect=el.getBoundingClientRect(), pw=pop.offsetWidth, ph=pop.offsetHeight;
+  let left=rect.right+8;                                   // par défaut à droite de la brique
+  if(left+pw>window.innerWidth-12) left=rect.left-pw-8;    // sinon à gauche
+  left=Math.max(12,Math.min(left,window.innerWidth-pw-12));
+  let top=rect.top;
+  if(top+ph>window.innerHeight-12) top=Math.max(12,window.innerHeight-ph-12);
+  pop.style.left=left+"px"; pop.style.top=top+"px";
+  currentKoPopEl=el;
+}
+function hideKoPop(){ const pop=$("#koPop"); if(pop) pop.classList.remove("show"); currentKoPopEl=null; }
+// ---- Plein écran du tableau ----
+function openKoFullscreen(){
+  const fs=$("#koFs"); if(!fs) return;
+  $("#koFsBody").innerHTML=bracketHTML();
+  fs.style.display="flex";
+  const req=fs.requestFullscreen||fs.webkitRequestFullscreen;
+  if(req) try{ req.call(fs); }catch(e){}
+}
+function closeKoFullscreen(){
+  const fs=$("#koFs"); if(!fs) return;
+  hideKoPop();
+  fs.style.display="none";
+  try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){}
 }
 // Rafraîchit le tableau au moment EXACT où le prochain match franchit le seuil des 2h (coup d'envoi + 2h),
 // pour que le mode Officiel se mette à jour seul, sans rechargement. Préserve le défilement du bracket.
@@ -1649,7 +1704,7 @@ function activateTab(p,dir){
   if(dir){ void panel.offsetWidth; panel.classList.add(dir>0?"swipe-next":"swipe-prev"); }
   // Garde l'onglet actif visible dans la barre défilante (mobile)
   try{ tab.scrollIntoView({behavior:"smooth",inline:"center",block:"nearest"}); }catch(e){}
-  hideMoodPop();
+  hideMoodPop(); hideKoPop();
   try{ localStorage.setItem(TAB_KEY,p); }catch(e){}
   // Garde l'URL alignée sur l'onglet (replaceState → pas de hashchange, pas de boucle, pas d'entrée d'historique parasite).
   if(currentHashTab()!==p){ try{ history.replaceState(null,"","#"+p); }catch(e){ location.hash=p; } }
@@ -1786,7 +1841,37 @@ function bindSwipe(){
     stepTab(dx<0?1:-1);                      // glisse vers la gauche → onglet suivant
   },{passive:true});
 }
+// ---- Thème jour / nuit / noir ----
+function applyTheme(t){
+  if(!["day","night","black"].includes(t)) t="night";
+  document.documentElement.setAttribute("data-theme",t);
+  document.querySelectorAll("#themeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.th===t));
+  try{ localStorage.setItem(THEME_KEY,t); }catch(e){}
+}
+function initTheme(){
+  let t; try{ t=localStorage.getItem(THEME_KEY); }catch(e){}
+  applyTheme(t||document.documentElement.getAttribute("data-theme")||"night");
+}
 function bind(){
+  initTheme();
+  $("#themeSeg").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return; applyTheme(b.dataset.th);});
+  // Bulle détail au survol d'une brique (PC) ; suit la souris d'une brique à l'autre, se ferme en dehors.
+  document.addEventListener("mouseover",e=>{
+    const bm=e.target.closest&&e.target.closest("#koTableau .bm, #koFsBody .bm");
+    if(bm){ if(currentKoPopEl!==bm) showKoPop(+bm.dataset.mid,bm); }
+    else if(!(e.target.closest&&e.target.closest("#koPop"))) hideKoPop();
+  });
+  // Appui tactile / clic : bascule la bulle ; clic ailleurs la ferme.
+  document.addEventListener("click",e=>{
+    const bm=e.target.closest&&e.target.closest("#koTableau .bm, #koFsBody .bm");
+    if(bm){ if(currentKoPopEl===bm) hideKoPop(); else showKoPop(+bm.dataset.mid,bm); return; }
+    if(!(e.target.closest&&e.target.closest("#koPop"))) hideKoPop();
+  });
+  window.addEventListener("scroll",hideKoPop,{passive:true,capture:true}); // le scroll (page ou tableau) décale les briques → on ferme la bulle
+  $("#btnKoFs").addEventListener("click",openKoFullscreen);
+  $("#koFsClose").addEventListener("click",closeKoFullscreen);
+  // Sortie du plein écran natif (Échap) → on referme aussi l'overlay.
+  document.addEventListener("fullscreenchange",()=>{ if(!document.fullscreenElement && $("#koFs").style.display!=="none") closeKoFullscreen(); });
   $("#tabs").addEventListener("click",e=>{const b=e.target.closest(".tab"); if(!b) return;
     const on=document.querySelector(".tab.on");
     if(on&&on.dataset.p===b.dataset.p){ // ré-appui sur l'onglet courant → retour en haut de la page

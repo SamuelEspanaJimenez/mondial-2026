@@ -4,33 +4,56 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mondial 2026</title>
+<script>/* applique le thème avant le rendu pour éviter tout clignotement */try{document.documentElement.setAttribute("data-theme",localStorage.getItem("cdm2026_theme_v1")||"night");}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root{
+    /* Thème par défaut « Nuit » (vert pelouse sombre) */
     --bg:#0a130f; --panel:#10201a; --panel2:#152a21; --raise:#1b3328;
     --line:rgba(214,230,223,.10); --chalk:rgba(214,230,223,.55);
     --ink:#eaf2ee; --muted:#8aa498; --faint:#5f7a6f;
     --grass:#39d27f; --grass-d:#1f7a4a; --amber:#f3c14b; --red:#ff6b6b;
+    --glow1:rgba(57,210,127,.07); --glow2:rgba(243,193,75,.05);
+    --header-a:rgba(10,19,15,.97); --header-b:rgba(10,19,15,.86);
     --radius:13px; --maxw:1180px;
+  }
+  /* Mode Jour (clair) */
+  html[data-theme="day"]{
+    --bg:#eef2f0; --panel:#ffffff; --panel2:#e9efeb; --raise:#dce7e0;
+    --line:rgba(16,40,28,.13); --chalk:rgba(16,40,28,.40);
+    --ink:#0e1c15; --muted:#46594f; --faint:#7b9085;
+    --grass:#12924f; --grass-d:#0c6b39; --amber:#b07d0a; --red:#cf3b3b;
+    --glow1:rgba(18,146,79,.10); --glow2:rgba(176,125,10,.08);
+    --header-a:rgba(238,242,240,.96); --header-b:rgba(238,242,240,.82);
+  }
+  /* Mode Noir (fond noir, accents vibrants du Mondial 26) */
+  html[data-theme="black"]{
+    --bg:#000000; --panel:#0c0c10; --panel2:#15151c; --raise:#21212a;
+    --line:rgba(255,255,255,.10); --chalk:rgba(255,255,255,.48);
+    --ink:#f6f6f8; --muted:#9b9ba6; --faint:#63636d;
+    --grass:#2fe07f; --grass-d:#177a44; --amber:#ffd24a; --red:#ff5c7a;
+    --glow1:rgba(47,224,127,.12); --glow2:rgba(124,92,255,.12);
+    --header-a:rgba(0,0,0,.96); --header-b:rgba(0,0,0,.80);
   }
   *{box-sizing:border-box}
   html{-webkit-text-size-adjust:100%; overflow-anchor:none} /* pas d'ancrage auto : on gère le scroll au changement d'onglet */
   body{
     margin:0; background:
-      radial-gradient(1200px 600px at 80% -200px, rgba(57,210,127,.07), transparent 60%),
-      radial-gradient(900px 500px at -10% 0%, rgba(243,193,75,.05), transparent 55%),
+      radial-gradient(1200px 600px at 80% -200px, var(--glow1), transparent 60%),
+      radial-gradient(900px 500px at -10% 0%, var(--glow2), transparent 55%),
       var(--bg);
     color:var(--ink); font-family:"Space Grotesk",system-ui,sans-serif;
     line-height:1.45; -webkit-font-smoothing:antialiased;
+    transition:background-color .25s ease, color .25s ease;
   }
   .mono{font-family:"Space Mono",ui-monospace,monospace}
   a{color:inherit}
   /* ---- header ---- */
   header{
     position:sticky; top:0; z-index:30;
-    background:linear-gradient(180deg, rgba(10,19,15,.97), rgba(10,19,15,.86));
+    background:linear-gradient(180deg, var(--header-a), var(--header-b));
     backdrop-filter:blur(10px);
     border-bottom:1px solid var(--line);
     transition:transform .3s cubic-bezier(.4,0,.2,1);
@@ -56,6 +79,12 @@
   .btn:hover{color:var(--ink); border-color:var(--chalk)}
   .btn:disabled{opacity:.32; cursor:default; pointer-events:none}
   .btn.danger:hover{color:var(--red); border-color:rgba(255,107,107,.5)}
+  /* Sélecteur de thème jour/nuit/noir */
+  .theme-seg button{padding:6px 9px; font-size:14px; line-height:1}
+  .theme-seg button.on{background:var(--raise); color:var(--ink)}
+  /* Logo officiel — visible uniquement en thème Noir */
+  .wclogo{height:46px; width:auto; display:none; align-self:center}
+  html[data-theme="black"] .wclogo{display:block}
   .tabs{max-width:var(--maxw); margin:0 auto; padding:12px 18px 0; display:flex; gap:4px; overflow-x:auto}
   .tab{font:inherit; font-size:13px; font-weight:600; letter-spacing:.01em; color:var(--muted);
     background:none; border:0; border-bottom:2px solid transparent; padding:9px 13px 12px; cursor:pointer; white-space:nowrap}
@@ -324,6 +353,31 @@
   .bm-orig{font-family:"Space Mono",monospace;font-size:8.5px;font-weight:700;color:var(--amber);opacity:.8;margin-left:3px;flex-shrink:0}
   .bm-sc{font-family:"Space Mono",monospace;font-weight:700;font-size:11px;margin-left:auto;min-width:13px;text-align:right;flex-shrink:0}
   .bm-team.win .bm-name,.bm-team.win .bm-sc{color:var(--grass)}
+  #koTableau .bm{cursor:pointer}
+  /* Bulle détail d'une brique de match (survol / appui) — équipes complètes + buteurs, sans notes */
+  .ko-pop{position:fixed; z-index:90; background:var(--panel2); border:1px solid var(--chalk);
+    border-radius:11px; padding:11px 13px; min-width:215px; max-width:320px;
+    box-shadow:0 12px 40px rgba(0,0,0,.6); opacity:0; pointer-events:none;
+    transition:opacity .12s, transform .12s; transform:translateY(-3px)}
+  .ko-pop.show{opacity:1; transform:none}
+  .ko-pop-hd{font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:8px; white-space:nowrap}
+  .kp-team{display:flex; align-items:center; gap:7px; padding:3px 0; font-size:13.5px; font-weight:600}
+  .kp-team .flag{width:20px; flex-shrink:0}
+  .kp-name{flex:1; min-width:0}
+  .kp-name.ph{color:var(--faint); font-weight:400; font-style:italic; font-size:12px}
+  .kp-team.win .kp-name, .kp-team.win .kp-sc{color:var(--grass)}
+  .kp-sc{font-family:"Space Mono",monospace; font-weight:700; font-size:14px; flex-shrink:0}
+  .kp-sco{font-size:11.5px; color:var(--muted); padding:1px 0 4px 27px; line-height:1.35}
+  /* Vue plein écran du tableau */
+  .kofs{position:fixed; inset:0; z-index:80; background:var(--bg); flex-direction:column; padding:8px 6px 6px}
+  .kofs-bar{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:4px 10px 8px}
+  .kofs-title{font-size:13px; font-weight:700; color:var(--ink)}
+  .kofs-body{flex:1; min-height:0; overflow:auto}
+  .kofs-body .bracket-wrap{padding:0 16px}
+  .kofs-body .bracket{min-width:1100px; width:100%; height:calc(100vh - 64px)}
+  .kofs-body .bm-name{max-width:none; white-space:normal; line-height:1.1}
+  .kofs-body .bm{cursor:pointer}
   /* PC : noms entiers des pays + tableau étalé sur toute la largeur de l'écran (déborde du conteneur centré
      pour gagner de la place sur les bords plutôt que rapetisser les cases) → tout tient sans défilement. */
   @media (min-width:641px){
@@ -439,14 +493,22 @@
 <header>
   <div class="bar">
     <div class="brandrow">
-      <div class="brand">
-        <span class="kicker">USA · Canada · Mexique</span>
-        <h1>Mondial <span class="yr">2026</span></h1>
+      <div class="brand" style="flex-direction:row;align-items:center;gap:14px">
+        <img class="wclogo" id="wcLogo" src="https://upload.wikimedia.org/wikipedia/en/thumb/1/17/2026_FIFA_World_Cup_emblem.svg/250px-2026_FIFA_World_Cup_emblem.svg.png" alt="Logo officiel Coupe du Monde 2026" referrerpolicy="no-referrer" loading="lazy">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span class="kicker">USA · Canada · Mexique</span>
+          <h1>Mondial <span class="yr">2026</span></h1>
+        </div>
       </div>
       <div class="progwrap">
         <div class="progmeta"><span>Matchs de poule renseignés</span><span><b id="pgN">0</b>/72</span></div>
         <div class="track"><div class="fill" id="pgFill"></div></div>
         <div class="actions">
+          <div class="seg theme-seg" id="themeSeg">
+            <button data-th="day" title="Mode jour">☀️</button>
+            <button data-th="night" title="Mode nuit">🌙</button>
+            <button data-th="black" title="Mode noir — thème Mondial 26">⚫</button>
+          </div>
           <button class="btn" id="btnExport">Exporter</button>
           <button class="btn" id="btnImport">Importer</button>
           <button class="btn danger" id="btnReset">Tout effacer</button>
@@ -534,6 +596,7 @@
         <button class="on" data-v="list">Liste éditable</button>
         <button data-v="bracket">Tableau</button>
       </div>
+      <button class="btn" id="btnKoFs" title="Afficher le tableau en plein écran">⛶ Plein écran</button>
       <button class="btn" id="btnKoIcs" title="Télécharger les 32 matchs à élimination directe au format .ics">📅 Exporter .ics</button>
       <button class="btn" id="btnGistSync" title="Synchroniser les données entre PC et publier l'agenda en ligne">☁ Sync cloud</button>
       <span id="thirdHint"></span>
@@ -595,6 +658,14 @@
 <button class="fab" id="fab" data-mode="" type="button" aria-label="Naviguer"></button>
 <div class="toast" id="toast"></div>
 <div class="mood-pop" id="moodPop"></div>
+<div class="ko-pop" id="koPop"></div>
+<div class="kofs" id="koFs" style="display:none">
+  <div class="kofs-bar">
+    <span class="kofs-title">Phase éliminatoire — tableau</span>
+    <button class="btn" id="koFsClose">✕ Fermer</button>
+  </div>
+  <div class="kofs-body" id="koFsBody"></div>
+</div>
 
 <!-- Fenêtre d'abonnement au calendrier (mode consultation) -->
 <div class="modal-ov" id="calModal">
