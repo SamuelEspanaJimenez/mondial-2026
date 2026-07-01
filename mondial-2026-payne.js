@@ -774,6 +774,22 @@ function openStandings(g){
 }
 
 /* ============ SCORERS LEADERBOARD ============ */
+let scoAliveOnly=false; // filtre « Toujours en lice » : ne garder que les buteurs d'équipes non éliminées
+// Prédicat « équipe encore en lice » d'après la vue OFFICIELLE : éliminée si elle a perdu un match à
+// élimination directe, ou si — tous les matchs de poule joués — elle ne figure pas parmi les 32 qualifiés.
+// Exception : les perdants de demi-finale restent en lice, ils disputent encore le match pour la 3e place.
+function aliveTeam(){
+  const ctx={res:state.res, ko:state.ko, official:true};
+  const res=koResolved(ctx);
+  const elim=new Set();
+  KO.forEach(k=>{ if(k.r==="Demi") return; const r=res[k.id]; if(r&&r.lose) elim.add(r.lose); });
+  if(groupsAllComplete(ctx)){
+    const qual=new Set();
+    KO.filter(k=>k.r==="16e").forEach(k=>{ const r=res[k.id]; if(r.h)qual.add(r.h); if(r.a)qual.add(r.a); });
+    return t=> !!t && qual.has(t) && !elim.has(t);
+  }
+  return t=> !!t && !elim.has(t); // poules en cours : nul n'est éliminé tant que le tableau n'est pas formé
+}
 function renderScorersLB(){
   const agg={};
   Object.keys(state.sco).forEach(id=>{
@@ -790,9 +806,15 @@ function renderScorersLB(){
       for(let j=0;j<c;j++) agg[key].vs.push(opp);
     });
   });
-  const arr=Object.values(agg).sort((a,b)=>b.g-a.g||a.n.localeCompare(b.n));
+  const allArr=Object.values(agg).sort((a,b)=>b.g-a.g||a.n.localeCompare(b.n));
+  const alive = scoAliveOnly ? aliveTeam() : null;
+  const arr = alive ? allArr.filter(x=>alive(x.t)) : allArr;
   const sub=$("#scoSub"), body=$("#scoBody");
-  if(!arr.length){ sub.textContent="— renseigne les buteurs depuis le calendrier"; body.innerHTML='<div class="empty">Aucun buteur saisi pour l\'instant.</div>'; return; }
+  if(!arr.length){
+    if(scoAliveOnly && allArr.length){ sub.textContent="— aucun buteur encore en lice"; body.innerHTML='<div class="empty">Aucun buteur d\'une équipe encore en lice.</div>'; }
+    else { sub.textContent="— renseigne les buteurs depuis le calendrier"; body.innerHTML='<div class="empty">Aucun buteur saisi pour l\'instant.</div>'; }
+    return;
+  }
   sub.textContent=`— ${arr.length} buteur${arr.length>1?'s':''} · ${arr.reduce((s,x)=>s+x.g,0)} but${arr.reduce((s,x)=>s+x.g,0)>1?'s':''}`;
   let rk=1;
   body.innerHTML=`<table><tbody>${arr.map((x,i,a)=>{
@@ -1927,6 +1949,7 @@ function bind(){
   $("#filtPrev").addEventListener("click",()=>stepDay(-1));
   $("#filtNext").addEventListener("click",()=>stepDay(1));
   $("#standGroup").addEventListener("change",e=>{standFilt=e.target.value; renderStandings();});
+  { const sa=$("#scoAlive"); if(sa) sa.addEventListener("change",e=>{ scoAliveOnly=e.target.checked; renderScorersLB(); }); }
   $("#filtToday").addEventListener("click",()=>{
     let d=todayParisView();
     if(d<CAL_MIN_DATE) d=CAL_MIN_DATE; else if(d>CAL_MAX_DATE) d=CAL_MAX_DATE;
