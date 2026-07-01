@@ -232,10 +232,10 @@ function predCtx(){
   });
   return {res,ko};
 }
-// Contexte « MATCH PROBABLE » : même base que le pronostic (vrais résultats + choix du bracket de l'utilisateur),
-// avec en plus un remplissage automatique — pour tout match encore indécis (ni vrai score, ni choix de l'utilisateur),
-// le vainqueur est donné au pays le mieux classé FIFA (voir koResolved + autoSeed). Ne touche jamais `state`.
-function probableCtx(){ const c=predCtx(); c.autoSeed=true; return c; }
+// Deux vues dérivées du pronostic servent l'affiche « probable » du calendrier (jamais écrites dans `state`) :
+//  - { ...predCtx(), strictSeed:true } : affiche connue UNIQUEMENT si l'utilisateur a simulé jusqu'à ce tour
+//    (groupes décidés + vainqueurs pronostiqués) → libellé « Match pronostiqué ».
+//  - { ...predCtx(), autoSeed:true }   : complète l'affiche par le repli classement FIFA → libellé « Match probable ».
 // Migration unique : convertit les anciens choix par position ('h'/'a') vers le nouveau format
 // { pick: <équipe gagnante>, opp: <adversaire> }. Sans ça, les brackets déjà remplis seraient perdus.
 function migratePredPicks(){
@@ -384,8 +384,13 @@ function renderCal(){
 
   // Matchs à élimination directe — équipes/scores synchronisés avec l'onglet Phase finale
   const koRes=koResolved();
-  // Résolution « probable » (pronostic utilisateur + repli FIFA) — sert aux matchs dont on affiche les équipes probables.
-  const probRes=koResolved(probableCtx());
+  // Deux résolutions pour l'affiche des matchs indéfinis :
+  //  - predRes : pronostic PUR (vrais résultats + choix de l'utilisateur, sans repli FIFA) → l'affiche n'est connue
+  //    que si l'utilisateur a simulé jusqu'à ce tour ; sert à choisir le libellé « Match pronostiqué » vs « probable ».
+  //  - probRes : predRes complété par le repli classement FIFA en cascade → teams toujours résolues.
+  const pctx=predCtx();
+  const predRes=koResolved({...pctx,strictSeed:true}); // teams connues seulement si groupes décidés + vainqueurs pronostiqués
+  const probRes=koResolved({...pctx,autoSeed:true});
   let koList=(filt.phase==="poule"||filt.group) ? [] : KO.filter(k=>{
     const st=state.ko[k.id]||{};
     const done=st.hs!==undefined&&st.hs!==""&&st.as!==undefined&&st.as!=="";
@@ -413,7 +418,7 @@ function renderCal(){
       <span class="sessday">${f.dow}</span><span class="sessdate">${f.date}</span>
       ${isToday?'<span class="live"><span class="dot"></span>aujourd\'hui</span>':''}
       <span class="sesscount">${items.length} match${items.length>1?'s':''}</span></div>`;
-    items.forEach(it=>sec.appendChild(it.kind==="ko" ? koMatchCard(it.m,koRes,probRes) : matchCard(it.m)));
+    items.forEach(it=>sec.appendChild(it.kind==="ko" ? koMatchCard(it.m,koRes,probRes,predRes) : matchCard(it.m)));
     wrap.appendChild(sec);
   });
   updateDayNav();
@@ -511,19 +516,24 @@ function koTeamCell(name,disp,isPh,cls,scoHtml){
   if(isPh) return `<span class="side ${cls} ph"><span class="tinfo"><span class="tname"><span class="full">${disp}</span><span class="short">${disp}</span></span></span></span>`;
   return `<span class="side ${cls}">${flag(name)}<span class="tinfo"><span class="tname"><span class="full">${name}</span><span class="short">${short(name)}</span></span>${scoHtml||""}</span></span>`;
 }
-// Équipe « probable » (non confirmée) : drapeau + nom, marquée `prob` ; le vainqueur projeté est mis en avant.
-function koProbCell(name,cls,isWin){
-  return `<span class="side ${cls} prob${isWin?' probwin':''}" title="Équipe probable — non confirmée">${flag(name)}<span class="tinfo"><span class="tname"><span class="full">${name}</span><span class="short">${short(name)}</span></span></span></span>`;
+// Équipe « probable » (non confirmée) : drapeau + nom, marquée `prob`. AUCUN format vainqueur/battu : on n'affiche
+// que l'AFFICHE probable du match (déduite des tours précédents), jamais l'issue du match qu'on active.
+function koProbCell(name,cls){
+  return `<span class="side ${cls} prob" title="Équipe probable — non confirmée">${flag(name)}<span class="tinfo"><span class="tname"><span class="full">${name}</span><span class="short">${short(name)}</span></span></span></span>`;
 }
 // Carte d'un match à élimination directe dans le calendrier.
 // Équipes résolues via koResolved() (placeholders sinon), scores éditables → state.ko.
-// probRes = résolution « probable » (pronostic utilisateur + repli FIFA), affichée à la demande pour les matchs indéfinis.
-function koMatchCard(k,res,probRes){
+// probRes = résolution « probable » (pronostic utilisateur + repli FIFA) pour l'affiche ; predRes = pronostic pur.
+function koMatchCard(k,res,probRes,predRes){
   const r=res[k.id]||{}, st=state.ko[k.id]||{};
   const hPh=!r.h, aPh=!r.a;
   const undef=hPh||aPh;                       // match dont au moins une équipe n'est pas encore connue
   const showProb=undef && probShown.has(k.id); // l'utilisateur a demandé l'affichage des équipes probables
   const pr=(probRes&&probRes[k.id])||{};
+  // Affiche entièrement issue du pronostic de l'utilisateur (il a simulé jusqu'à ce tour) → « Match pronostiqué »,
+  // sinon repli FIFA → « Match probable ».
+  const pp=(predRes&&predRes[k.id])||{};
+  const probLabel=(pp.h&&pp.a) ? "Match pronostiqué" : "Match probable";
   const hName=r.h||slotHint(k.sh), aName=r.a||slotHint(k.sa);
   const hv=(st.hs==null?"":st.hs), av=(st.as==null?"":st.as);
   const done=hv!==""&&av!=="";
@@ -548,7 +558,7 @@ function koMatchCard(k,res,probRes){
         <span class="hr mono">${k.t}</span>
         <span class="gp ko" title="${ROUND_LABEL[k.r]}">${KO_TAG[k.r]||k.r}</span>
       </span>
-      ${(hPh&&showProb&&pr.h) ? koProbCell(pr.h,"home",pr.win===pr.h) : koTeamCell(r.h,hName,hPh,"home")}
+      ${(hPh&&showProb&&pr.h) ? koProbCell(pr.h,"home") : koTeamCell(r.h,hName,hPh,"home")}
       ${READ_ONLY
         ? `<span class="scorebox ro"><span class="sval mono">${done?hv:"–"}</span><span class="vs">–</span><span class="sval mono">${done?av:"–"}</span></span>`
         : `<span class="scorebox">
@@ -556,11 +566,11 @@ function koMatchCard(k,res,probRes){
         <span class="vs">–</span>
         <input class="mono" type="number" min="0" inputmode="numeric" data-koid="${k.id}" data-s="as" value="${av}">
       </span>`}
-      ${(aPh&&showProb&&pr.a) ? koProbCell(pr.a,"away",pr.win===pr.a) : koTeamCell(r.a,aName,aPh,"away")}
+      ${(aPh&&showProb&&pr.a) ? koProbCell(pr.a,"away") : koTeamCell(r.a,aName,aPh,"away")}
       <button class="mexpand ${scs.length?'has':''}" data-exp="${k.id}" title="Buteurs">⚽</button>
     </div>
     ${scorersStrip(scs)}
-    <div class="mmeta">📍 ${k.v}${pen}${undef?`<button class="probtog${showProb?' on':''}" data-prob="${k.id}" title="Affiche/masque les équipes probables (pronostic ou classement FIFA)">${showProb?'✓ Match probable':'Match probable'}</button>`:''}</div>
+    <div class="mmeta">📍 ${k.v}${pen}${undef?`<button class="probtog${showProb?' on':''}" data-prob="${k.id}" title="Affiche/masque l'affiche probable du match (pronostic si simulé, sinon classement FIFA)">${showProb?'✓ '+probLabel:probLabel}</button>`:''}</div>
     ${ratingRow(k.id)}
     <div class="scorers" id="sco-${k.id}"></div>`;
   return el;
@@ -876,6 +886,16 @@ function seedDirect(ctx){
     });
     return map;
   }
+  // Mode « strict » (ctx.strictSeed) : on ne place le 1er/2e d'un groupe QUE si ce groupe est complet dans le
+  // contexte (tous ses matchs ont un résultat réel ou pronostiqué). Sinon "" → l'affiche n'est pas « pronostiquée ».
+  if(ctx&&ctx.strictSeed){
+    Object.keys(GROUPS).forEach(g=>{
+      const rows=computeGroup(g,ctx);
+      if(rows.every(r=>r.J===3)){ map["1"+g]=rows[0].t; map["2"+g]=rows[1].t; }
+      else { map["1"+g]=""; map["2"+g]=""; }
+    });
+    return map;
+  }
   Object.keys(GROUPS).forEach(g=>{
     const rows=computeGroup(g,ctx);
     map["1"+g]=rows[0].t; map["2"+g]=rows[1].t;
@@ -970,7 +990,7 @@ function thirdPlaceMapping(ctx){
   // Mode « officiel » : le classement des 3es n'est figé que lorsque les 12 troisièmes sont
   // connus ET définitifs (tous les matchs de groupe joués). Avant cela, ils se répartissent
   // différemment dans le tableau selon les groupes d'origine → on ne place aucun 3e.
-  if(ctx&&ctx.official&&!groupsAllComplete(ctx)) return null;
+  if(ctx&&(ctx.official||ctx.strictSeed)&&!groupsAllComplete(ctx)) return null;
   const thirds=bestThirds(ctx);
   const top8=thirds.slice(0,8);
   const key=top8.map(x=>x.g).sort().join("");
@@ -2196,7 +2216,7 @@ function refreshCardState(id){
   const card=anchor.closest(".match"); if(!card) return;
   const sb=card.querySelector(".scorers"); const wasOpen=sb&&sb.classList.contains("open");
   const m=MATCHES.find(x=>x.id===id);
-  const fresh = m ? matchCard(m) : (()=>{const k=KO.find(x=>x.id===id); return k?koMatchCard(k,koResolved(),koResolved(probableCtx())):null;})();
+  const fresh = m ? matchCard(m) : (()=>{const k=KO.find(x=>x.id===id); if(!k) return null; const pc=predCtx(); return koMatchCard(k,koResolved(),koResolved({...pc,autoSeed:true}),koResolved({...pc,strictSeed:true}));})();
   if(!fresh) return;
   card.replaceWith(fresh);
   if(wasOpen){renderScorersEditor(id); $("#sco-"+id).classList.add("open"); const ex=$('[data-exp="'+id+'"]'); if(ex&&(state.sco[id]||[]).length) ex.classList.add("has");}
