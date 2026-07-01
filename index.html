@@ -183,6 +183,16 @@
   .seeStand{margin-left:auto; font:inherit; font-size:10.5px; color:var(--faint); background:none; border:0;
     cursor:pointer; opacity:.5; padding:2px 5px; border-radius:5px; transition:.15s; text-decoration:underline dotted; white-space:nowrap}
   .seeStand:hover{opacity:1; color:var(--grass)}
+  /* bascule « Match probable » (matchs KO dont les équipes ne sont pas encore connues) */
+  .probtog{margin-left:auto; font:inherit; font-size:10.5px; color:var(--faint); background:none; border:1px solid var(--line);
+    cursor:pointer; padding:2px 9px; border-radius:999px; transition:.15s; white-space:nowrap}
+  .probtog:hover{color:var(--amber); border-color:rgba(243,193,75,.45)}
+  .probtog.on{color:#0a130f; background:var(--amber); border-color:var(--amber); font-weight:700}
+  /* équipe « probable » (non confirmée) affichée à la place d'un placeholder « Vainqueur M… » */
+  .match.ko .side.prob .tname{color:var(--muted); font-style:italic; font-weight:600; font-size:14px; white-space:nowrap; line-height:1.2}
+  .match.ko .side.prob.probwin .tname{color:var(--amber); font-style:normal}
+  .side.prob .flag{opacity:.8; filter:saturate(.8)}
+  .side.prob.probwin .flag{opacity:1; filter:none}
   /* scorers editor */
   .scorers{margin-top:10px; padding-top:11px; border-top:1px dashed var(--line); display:none}
   .scorers.open{display:block}
