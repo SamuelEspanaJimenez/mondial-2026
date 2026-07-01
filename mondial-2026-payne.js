@@ -1149,17 +1149,18 @@ function bracketHTML(){
     // Tirs au but : les deux scores en jaune, collés au score de leur équipe ; côté gauche du tableau → à gauche du score, côté droit → à droite.
     const pHas=st.phs!==undefined&&st.phs!==""&&st.pas!==undefined&&st.pas!=="";
     const left=leftIds.has(id);
-    const scBox=(main,penVal)=>{
+    // « a.p. » (prolongations) : affiché à côté du score du VAINQUEUR — à gauche du score côté gauche du tableau,
+    // à droite côté droit. Les t.a.b. (bm-pen) restent collés au score, le « a.p. » se place à l'extérieur.
+    const scBox=(main,penVal,showAet)=>{
       const scEl=`<span class="bm-sc">${sc(main)}</span>`;
       const pEl=pHas?`<span class="bm-pen">${penVal}</span>`:"";
-      return `<span class="bm-scbox">${left?pEl+scEl:scEl+pEl}</span>`;
+      const aEl=showAet?`<span class="bm-aet">a.p.</span>`:"";
+      return `<span class="bm-scbox">${left ? aEl+pEl+scEl : scEl+pEl+aEl}</span>`;
     };
-    const note=st.aet?"a.p.":""; // les t.a.b. sont désormais affichés à côté des scores
     return `<div class="bm ${k.r==='Finale'?'bm-final':''}" data-mid="${id}">
       <div class="bm-hdr"><span>M${id}</span><span>${RD_SHORT[k.r]}</span></div>
-      <div class="bm-team ${hWin?'win':''}">${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span>${scBox(r.hs,st.phs)}</div>
-      <div class="bm-team ${aWin?'win':''}">${bmFlag(r.a,aPh)}<span class="bm-name ${aPh?'ph':''}">${aDisp}</span>${scBox(r.as,st.pas)}</div>
-      ${note?`<div class="bm-note">${note}</div>`:''}
+      <div class="bm-team ${hWin?'win':''}">${bmFlag(r.h,hPh)}<span class="bm-name ${hPh?'ph':''}">${hDisp}</span>${scBox(r.hs,st.phs,hWin&&st.aet)}</div>
+      <div class="bm-team ${aWin?'win':''}">${bmFlag(r.a,aPh)}<span class="bm-name ${aPh?'ph':''}">${aDisp}</span>${scBox(r.as,st.pas,aWin&&st.aet)}</div>
     </div>`;
   };
   const col=(ids,cls)=>`<div class="b-col ${cls||''}">${ids.map(box).join("")}</div>`;
